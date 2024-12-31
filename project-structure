@@ -1,0 +1,4 @@
+cv-autofill-pro/
+├── frontend/                 # تطبيق React
+├── backend/                  # تطبيق Django
+└── chrome-extension/        # امتداد Chrome 

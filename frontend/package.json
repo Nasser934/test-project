@@ -1,0 +1,22 @@
+{
+  "name": "cv-autofill-pro-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@material-ui/core": "^4.12.4",
+    "@material-ui/icons": "^4.11.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.x",
+    "axios": "^1.x",
+    "formik": "^2.x",
+    "yup": "^1.x",
+    "typescript": "^4.x"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  }
+} 

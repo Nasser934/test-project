@@ -1,0 +1,9 @@
+Django==4.2.x
+djangorestframework==3.14.x
+django-cors-headers==4.x
+psycopg2-binary==2.9.x
+python-dotenv==1.0.x
+Pillow==10.x
+tensorflow==2.x
+opencv-python==4.x
+numpy==1.x 

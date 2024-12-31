@@ -1,0 +1,16 @@
+frontend/
+├── public/
+├── src/
+│   ├── components/
+│   │   ├── auth/
+│   │   ├── cv/
+│   │   ├── dashboard/
+│   │   └── shared/
+│   ├── services/
+│   ├── utils/
+│   ├── hooks/
+│   ├── context/
+│   ├── assets/
+│   └── styles/
+├── package.json
+└── tsconfig.json 

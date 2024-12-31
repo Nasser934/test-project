@@ -1,0 +1,11 @@
+chrome-extension/
+├── src/
+│   ├── components/
+│   ├── services/
+│   ├── utils/
+│   └── assets/
+├── public/
+│   ├── manifest.json
+│   ├── icons/
+│   └── popup.html
+└── package.json 

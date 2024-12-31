@@ -1,0 +1,21 @@
+backend/
+├── cv_autofill/
+│   ├── __init__.py
+│   ├── settings/
+│   │   ├── __init__.py
+│   │   ├── base.py
+│   │   ├── development.py
+│   │   └── production.py
+│   ├── urls.py
+│   └── wsgi.py
+├── apps/
+│   ├── users/
+│   ├── cv_manager/
+│   ├── form_recognition/
+│   └── analytics/
+├── utils/
+├── requirements/
+│   ├── base.txt
+│   ├── development.txt
+│   └── production.txt
+└── manage.py 
