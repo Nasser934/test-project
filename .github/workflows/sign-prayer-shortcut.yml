@@ -19,56 +19,67 @@ jobs:
             shortcut-signing
           sparse-checkout-cone-mode: true
 
-      - name: Decode and sign with HubSign API
+      - name: Try HubSign JSON API and save diagnostics
         run: |
           python3 - <<'PY'
-          import base64, json, plistlib, urllib.request, urllib.error
+          import base64, json, plistlib, urllib.request, urllib.error, traceback
           from pathlib import Path
 
-          raw_b64 = Path('shortcut-signing/Prayer_Alarms_No_Duplicates.b64').read_text().strip()
-          raw = base64.b64decode(raw_b64)
-          shortcut = plistlib.loads(raw)
-          xml = plistlib.dumps(shortcut, fmt=plistlib.FMT_XML, sort_keys=False).decode('utf-8')
-
-          payload = json.dumps({
-              'shortcutName': 'منبه الصلوات بدون تكرار',
-              'shortcut': xml,
-          }, ensure_ascii=False).encode('utf-8')
-
-          req = urllib.request.Request(
-              'https://hubsign.routinehub.services/sign',
-              data=payload,
-              headers={
-                  'Content-Type': 'application/json',
-                  'User-Agent': 'cherri/2.3.0',
-                  'Accept': 'application/octet-stream, application/x-plist, application/x-apple-shortcut',
-              },
-              method='POST',
-          )
-
+          log = []
           try:
+              raw_b64 = Path('shortcut-signing/Prayer_Alarms_No_Duplicates.b64').read_text().strip()
+              raw = base64.b64decode(raw_b64)
+              shortcut = plistlib.loads(raw)
+              xml = plistlib.dumps(shortcut, fmt=plistlib.FMT_XML, sort_keys=False).decode('utf-8')
+              payload = json.dumps({
+                  'shortcutName': 'منبه الصلوات بدون تكرار',
+                  'shortcut': xml,
+              }, ensure_ascii=False).encode('utf-8')
+              log.append(f'payload_bytes={len(payload)}')
+
+              req = urllib.request.Request(
+                  'https://hubsign.routinehub.services/sign',
+                  data=payload,
+                  headers={
+                      'Content-Type': 'application/json',
+                      'User-Agent': 'cherri/2.3.0',
+                      'Accept': '*/*',
+                  },
+                  method='POST',
+              )
               with urllib.request.urlopen(req, timeout=60) as res:
                   body = res.read()
-                  print('status=', res.status)
-                  print('content-type=', res.headers.get('Content-Type'))
-                  print('bytes=', len(body))
+                  log += [
+                      f'status={res.status}',
+                      f'final_url={res.geturl()}',
+                      f'content_type={res.headers.get("Content-Type")}',
+                      f'bytes={len(body)}',
+                      f'prefix_repr={body[:200]!r}',
+                  ]
+              Path('hubsign-response.bin').write_bytes(body)
+              if body.startswith(b'AEA1'):
+                  Path('Prayer_Alarms_No_Duplicates_Signed.shortcut').write_bytes(body)
+                  log.append('signed=true')
+              else:
+                  log.append('signed=false')
           except urllib.error.HTTPError as e:
               body = e.read()
-              print('HTTP error=', e.code)
-              print(body[:1000].decode('utf-8', errors='replace'))
-              raise
+              Path('hubsign-response.bin').write_bytes(body)
+              log += [f'http_error={e.code}', f'url={e.geturl()}', f'headers={dict(e.headers)}', f'body_prefix={body[:1000]!r}']
+          except Exception as e:
+              log += [f'exception={type(e).__name__}: {e}', traceback.format_exc()]
 
-          if not body.startswith(b'AEA1'):
-              print('response prefix=', body[:200])
-              raise SystemExit('HubSign response is not an AEA1 signed shortcut')
-
-          Path('Prayer_Alarms_No_Duplicates_Signed.shortcut').write_bytes(body)
-          print('Signed shortcut created successfully')
+          Path('hubsign-diagnostics.txt').write_text('\n'.join(log), encoding='utf-8')
+          print('\n'.join(log))
           PY
 
-      - name: Upload signed shortcut
+      - name: Upload result and diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Prayer_Alarms_No_Duplicates_Signed
-          path: Prayer_Alarms_No_Duplicates_Signed.shortcut
+          name: hubsign-results
+          path: |
+            Prayer_Alarms_No_Duplicates_Signed.shortcut
+            hubsign-response.bin
+            hubsign-diagnostics.txt
           if-no-files-found: error
