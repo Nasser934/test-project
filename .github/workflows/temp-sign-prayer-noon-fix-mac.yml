@@ -1,0 +1,59 @@
+name: Temp Sign Prayer Noon Fix Mac
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    runs-on: macos-15
+    steps:
+      - name: Build, fix noon, and sign
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, plistlib, urllib.request
+          from pathlib import Path
+
+          source_url='https://raw.githubusercontent.com/Nasser934/test-project/shortcut-signing-prayer-20260709/shortcut-signing/Prayer_Alarms_No_Duplicates.b64'
+          raw=base64.b64decode(urllib.request.urlopen(source_url,timeout=60).read().decode().strip(),validate=True)
+          assert hashlib.sha256(raw).hexdigest()=='6b43e942e5d5069f583295293d00e06756ff2441f0f1885349375d156731f17e'
+          sc=plistlib.loads(raw)
+          actions=sc['WFWorkflowActions']
+          i=next(i for i,a in enumerate(actions) if a.get('WFWorkflowActionIdentifier')=='is.workflow.actions.getvalueforkey' and a.get('WFWorkflowActionParameters',{}).get('WFDictionaryKey')=='data.timings.Dhuhr')
+          adjust_uuid=actions[i+1]['WFWorkflowActionParameters']['UUID']
+          format_uuid='F6D93E94-5B35-4EEA-9A0D-D53B625A7D2A'
+          actions.insert(i+2,{
+            'WFWorkflowActionIdentifier':'is.workflow.actions.format.date',
+            'WFWorkflowActionParameters':{
+              'UUID':format_uuid,
+              'WFDate':{'Value':{'string':'\ufffc','attachmentsByRange':{'{0, 1}':{'OutputUUID':adjust_uuid,'Type':'ActionOutput','OutputName':'Adjusted Date'}}},'WFSerializationType':'WFTextTokenString'},
+              'WFDateFormatStyle':'Custom','WFDateFormat':'Custom','WFDateFormatString':'hh:mm a'
+            }
+          })
+          actions[i+3]['WFWorkflowActionParameters']['dateComponents']={
+            'Value':{'string':'\ufffc','attachmentsByRange':{'{0, 1}':{'OutputUUID':format_uuid,'Type':'ActionOutput','OutputName':'Formatted Date'}}},
+            'WFSerializationType':'WFTextTokenString'
+          }
+          assert len(actions)==37
+          xml=plistlib.dumps(sc,fmt=plistlib.FMT_XML,sort_keys=False).decode()
+          payload=json.dumps({'shortcutName':'منبه الصلوات بدون تكرار - تصحيح الظهر','shortcut':xml},ensure_ascii=False).encode()
+          req=urllib.request.Request('https://hubsign.routinehub.services/sign',data=payload,headers={'Content-Type':'application/json','User-Agent':'cherri/2.3.0','Accept':'*/*'},method='POST')
+          body=urllib.request.urlopen(req,timeout=60).read()
+          assert body.startswith(b'AEA1')
+          Path('Prayer_Alarms_No_Duplicates_Noon_Fixed_Signed.shortcut').write_bytes(body)
+          Path('result.txt').write_text(f'actions={len(actions)}\nbytes={len(body)}\nprefix={body[:4]!r}\n',encoding='utf-8')
+          print('signed',len(body))
+          PY
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Prayer_Alarms_No_Duplicates_Noon_Fixed_Signed_Mac
+          path: |
+            Prayer_Alarms_No_Duplicates_Noon_Fixed_Signed.shortcut
+            result.txt
+          if-no-files-found: error
