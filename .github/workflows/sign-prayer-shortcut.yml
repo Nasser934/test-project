@@ -1,0 +1,37 @@
+name: Sign Prayer Shortcut
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Decode unsigned shortcut
+        run: |
+          base64 --decode shortcut-signing/Prayer_Alarms_No_Duplicates.b64 > Prayer_Alarms_No_Duplicates.shortcut
+          file Prayer_Alarms_No_Duplicates.shortcut
+
+      - name: Show Shortcuts CLI help
+        run: |
+          shortcuts help sign || shortcuts sign --help || true
+
+      - name: Sign shortcut for anyone
+        run: |
+          shortcuts sign --mode anyone --input Prayer_Alarms_No_Duplicates.shortcut --output Prayer_Alarms_No_Duplicates_Signed.shortcut
+          ls -lh Prayer_Alarms_No_Duplicates_Signed.shortcut
+          file Prayer_Alarms_No_Duplicates_Signed.shortcut
+
+      - name: Upload signed shortcut
+        uses: actions/upload-artifact@v4
+        with:
+          name: Prayer_Alarms_No_Duplicates_Signed
+          path: Prayer_Alarms_No_Duplicates_Signed.shortcut
+          if-no-files-found: error
