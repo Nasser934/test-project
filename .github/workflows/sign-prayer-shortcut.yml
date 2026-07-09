@@ -19,7 +19,7 @@ jobs:
             shortcut-signing
           sparse-checkout-cone-mode: true
 
-      - name: Decode shortcut payloads
+      - name: Decode and convert shortcut payloads to XML plist
         run: |
           python3 - <<'PY'
           import base64
@@ -31,27 +31,27 @@ jobs:
               src = Path('shortcut-signing', src_name).read_text().strip()
               Path(dst_name).write_bytes(base64.b64decode(src))
           PY
-          ls -lh *.shortcut
-          file *.shortcut
+          cp Original_Prayer_Alarms.shortcut Original_Prayer_Alarms_XML.shortcut
+          cp Prayer_Alarms_No_Duplicates.shortcut Prayer_Alarms_No_Duplicates_XML.shortcut
+          plutil -convert xml1 Original_Prayer_Alarms_XML.shortcut
+          plutil -convert xml1 Prayer_Alarms_No_Duplicates_XML.shortcut
+          file *_XML.shortcut
 
-      - name: Sign extracted original
+      - name: Sign XML extracted original
         run: |
           set +e
-          sw_vers
-          shortcuts sign --mode anyone --input Original_Prayer_Alarms.shortcut --output Original_Prayer_Alarms_Signed.shortcut > sign-original.log 2>&1
+          shortcuts sign --mode anyone --input Original_Prayer_Alarms_XML.shortcut --output Original_Prayer_Alarms_XML_Signed.shortcut > sign-original.log 2>&1
           status=$?
           cat sign-original.log
-          echo "original_sign_exit_code=$status"
           echo "$status" > original-exit-code.txt
           exit 0
 
-      - name: Sign no-duplicates version
+      - name: Sign XML no-duplicates version
         run: |
           set +e
-          shortcuts sign --mode anyone --input Prayer_Alarms_No_Duplicates.shortcut --output Prayer_Alarms_No_Duplicates_Signed.shortcut > sign-modified.log 2>&1
+          shortcuts sign --mode anyone --input Prayer_Alarms_No_Duplicates_XML.shortcut --output Prayer_Alarms_No_Duplicates_Signed.shortcut > sign-modified.log 2>&1
           status=$?
           cat sign-modified.log
-          echo "modified_sign_exit_code=$status"
           echo "$status" > modified-exit-code.txt
           exit 0
 
@@ -59,7 +59,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: shortcut-sign-results
+          name: shortcut-sign-results-xml
           path: |
             *_Signed.shortcut
             sign-*.log
