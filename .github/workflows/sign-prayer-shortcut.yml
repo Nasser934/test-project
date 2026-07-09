@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   sign:
-    runs-on: macos-15
+    runs-on: macos-14
     steps:
       - name: Checkout only shortcut payload
         uses: actions/checkout@v4
