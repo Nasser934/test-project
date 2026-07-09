@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   sign:
-    runs-on: macos-14
+    runs-on: macos-26
     steps:
       - name: Checkout only shortcut payload
         uses: actions/checkout@v4
@@ -30,13 +30,10 @@ jobs:
           ls -lh Prayer_Alarms_No_Duplicates.shortcut
           file Prayer_Alarms_No_Duplicates.shortcut
 
-      - name: Show Shortcuts CLI help
-        run: |
-          shortcuts help sign || shortcuts sign --help || true
-
       - name: Sign shortcut for anyone
         run: |
           set +e
+          sw_vers
           shortcuts sign --mode anyone --input Prayer_Alarms_No_Duplicates.shortcut --output Prayer_Alarms_No_Duplicates_Signed.shortcut > sign.log 2>&1
           status=$?
           cat sign.log
