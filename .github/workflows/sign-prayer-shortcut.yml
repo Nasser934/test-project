@@ -16,7 +16,13 @@ jobs:
 
       - name: Decode unsigned shortcut
         run: |
-          base64 --decode shortcut-signing/Prayer_Alarms_No_Duplicates.b64 > Prayer_Alarms_No_Duplicates.shortcut
+          python3 - <<'PY'
+          import base64
+          from pathlib import Path
+          src = Path('shortcut-signing/Prayer_Alarms_No_Duplicates.b64').read_text().strip()
+          Path('Prayer_Alarms_No_Duplicates.shortcut').write_bytes(base64.b64decode(src))
+          PY
+          ls -lh Prayer_Alarms_No_Duplicates.shortcut
           file Prayer_Alarms_No_Duplicates.shortcut
 
       - name: Show Shortcuts CLI help
