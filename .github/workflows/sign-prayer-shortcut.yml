@@ -9,9 +9,9 @@ permissions:
 
 jobs:
   sign:
-    runs-on: macos-15
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout only shortcut payloads
+      - name: Checkout only shortcut payload
         uses: actions/checkout@v4
         with:
           show-progress: false
@@ -19,49 +19,56 @@ jobs:
             shortcut-signing
           sparse-checkout-cone-mode: true
 
-      - name: Decode and convert shortcut payloads to XML plist
+      - name: Decode and sign with HubSign API
         run: |
           python3 - <<'PY'
-          import base64
+          import base64, json, plistlib, urllib.request, urllib.error
           from pathlib import Path
-          for src_name, dst_name in [
-              ('Original_Prayer_Alarms.b64', 'Original_Prayer_Alarms.shortcut'),
-              ('Prayer_Alarms_No_Duplicates.b64', 'Prayer_Alarms_No_Duplicates.shortcut'),
-          ]:
-              src = Path('shortcut-signing', src_name).read_text().strip()
-              Path(dst_name).write_bytes(base64.b64decode(src))
+
+          raw_b64 = Path('shortcut-signing/Prayer_Alarms_No_Duplicates.b64').read_text().strip()
+          raw = base64.b64decode(raw_b64)
+          shortcut = plistlib.loads(raw)
+          xml = plistlib.dumps(shortcut, fmt=plistlib.FMT_XML, sort_keys=False).decode('utf-8')
+
+          payload = json.dumps({
+              'shortcutName': 'منبه الصلوات بدون تكرار',
+              'shortcut': xml,
+          }, ensure_ascii=False).encode('utf-8')
+
+          req = urllib.request.Request(
+              'https://hubsign.routinehub.services/sign',
+              data=payload,
+              headers={
+                  'Content-Type': 'application/json',
+                  'User-Agent': 'cherri/2.3.0',
+                  'Accept': 'application/octet-stream, application/x-plist, application/x-apple-shortcut',
+              },
+              method='POST',
+          )
+
+          try:
+              with urllib.request.urlopen(req, timeout=60) as res:
+                  body = res.read()
+                  print('status=', res.status)
+                  print('content-type=', res.headers.get('Content-Type'))
+                  print('bytes=', len(body))
+          except urllib.error.HTTPError as e:
+              body = e.read()
+              print('HTTP error=', e.code)
+              print(body[:1000].decode('utf-8', errors='replace'))
+              raise
+
+          if not body.startswith(b'AEA1'):
+              print('response prefix=', body[:200])
+              raise SystemExit('HubSign response is not an AEA1 signed shortcut')
+
+          Path('Prayer_Alarms_No_Duplicates_Signed.shortcut').write_bytes(body)
+          print('Signed shortcut created successfully')
           PY
-          cp Original_Prayer_Alarms.shortcut Original_Prayer_Alarms_XML.shortcut
-          cp Prayer_Alarms_No_Duplicates.shortcut Prayer_Alarms_No_Duplicates_XML.shortcut
-          plutil -convert xml1 Original_Prayer_Alarms_XML.shortcut
-          plutil -convert xml1 Prayer_Alarms_No_Duplicates_XML.shortcut
-          file *_XML.shortcut
 
-      - name: Sign XML extracted original
-        run: |
-          set +e
-          shortcuts sign --mode anyone --input Original_Prayer_Alarms_XML.shortcut --output Original_Prayer_Alarms_XML_Signed.shortcut > sign-original.log 2>&1
-          status=$?
-          cat sign-original.log
-          echo "$status" > original-exit-code.txt
-          exit 0
-
-      - name: Sign XML no-duplicates version
-        run: |
-          set +e
-          shortcuts sign --mode anyone --input Prayer_Alarms_No_Duplicates_XML.shortcut --output Prayer_Alarms_No_Duplicates_Signed.shortcut > sign-modified.log 2>&1
-          status=$?
-          cat sign-modified.log
-          echo "$status" > modified-exit-code.txt
-          exit 0
-
-      - name: Upload signed files and diagnostics
-        if: always()
+      - name: Upload signed shortcut
         uses: actions/upload-artifact@v4
         with:
-          name: shortcut-sign-results-xml
-          path: |
-            *_Signed.shortcut
-            sign-*.log
-            *-exit-code.txt
+          name: Prayer_Alarms_No_Duplicates_Signed
+          path: Prayer_Alarms_No_Duplicates_Signed.shortcut
           if-no-files-found: error
