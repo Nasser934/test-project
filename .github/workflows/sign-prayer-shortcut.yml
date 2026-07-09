@@ -11,7 +11,7 @@ jobs:
   sign:
     runs-on: macos-26
     steps:
-      - name: Checkout only shortcut payload
+      - name: Checkout only shortcut payloads
         uses: actions/checkout@v4
         with:
           show-progress: false
@@ -19,41 +19,49 @@ jobs:
             shortcut-signing
           sparse-checkout-cone-mode: true
 
-      - name: Decode unsigned shortcut
+      - name: Decode shortcut payloads
         run: |
           python3 - <<'PY'
           import base64
           from pathlib import Path
-          src = Path('shortcut-signing/Prayer_Alarms_No_Duplicates.b64').read_text().strip()
-          Path('Prayer_Alarms_No_Duplicates.shortcut').write_bytes(base64.b64decode(src))
+          for src_name, dst_name in [
+              ('Original_Prayer_Alarms.b64', 'Original_Prayer_Alarms.shortcut'),
+              ('Prayer_Alarms_No_Duplicates.b64', 'Prayer_Alarms_No_Duplicates.shortcut'),
+          ]:
+              src = Path('shortcut-signing', src_name).read_text().strip()
+              Path(dst_name).write_bytes(base64.b64decode(src))
           PY
-          ls -lh Prayer_Alarms_No_Duplicates.shortcut
-          file Prayer_Alarms_No_Duplicates.shortcut
+          ls -lh *.shortcut
+          file *.shortcut
 
-      - name: Sign shortcut for anyone
+      - name: Sign extracted original
         run: |
           set +e
           sw_vers
-          shortcuts sign --mode anyone --input Prayer_Alarms_No_Duplicates.shortcut --output Prayer_Alarms_No_Duplicates_Signed.shortcut > sign.log 2>&1
+          shortcuts sign --mode anyone --input Original_Prayer_Alarms.shortcut --output Original_Prayer_Alarms_Signed.shortcut > sign-original.log 2>&1
           status=$?
-          cat sign.log
-          echo "sign_exit_code=$status"
-          if [ "$status" -ne 0 ]; then exit "$status"; fi
-          ls -lh Prayer_Alarms_No_Duplicates_Signed.shortcut
-          file Prayer_Alarms_No_Duplicates_Signed.shortcut
+          cat sign-original.log
+          echo "original_sign_exit_code=$status"
+          echo "$status" > original-exit-code.txt
+          exit 0
 
-      - name: Upload signed shortcut
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Prayer_Alarms_No_Duplicates_Signed
-          path: Prayer_Alarms_No_Duplicates_Signed.shortcut
-          if-no-files-found: error
+      - name: Sign no-duplicates version
+        run: |
+          set +e
+          shortcuts sign --mode anyone --input Prayer_Alarms_No_Duplicates.shortcut --output Prayer_Alarms_No_Duplicates_Signed.shortcut > sign-modified.log 2>&1
+          status=$?
+          cat sign-modified.log
+          echo "modified_sign_exit_code=$status"
+          echo "$status" > modified-exit-code.txt
+          exit 0
 
-      - name: Upload signing log
+      - name: Upload signed files and diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: shortcut-sign-log
-          path: sign.log
-          if-no-files-found: ignore
+          name: shortcut-sign-results
+          path: |
+            *_Signed.shortcut
+            sign-*.log
+            *-exit-code.txt
+          if-no-files-found: error
