@@ -132,7 +132,7 @@ jobs:
                   raise ValueError(f'Interactive/unsupported actions remain: {present_forbidden}')
 
               labels = [
-                  a.get('WFWorkflowActionParameters', {}).get('label')
+                  a.get('WFWorkflowActionParameters', {}).get('name')
                   for a in actions
                   if a.get('WFWorkflowActionIdentifier') == 'com.apple.mobiletimer-framework.MobileTimerIntents.MTCreateAlarmIntent'
               ]
