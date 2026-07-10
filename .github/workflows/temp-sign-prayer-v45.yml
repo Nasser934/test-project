@@ -1,0 +1,129 @@
+name: Temp Sign Prayer V4.5
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout V4.5 payload only
+        uses: actions/checkout@v4
+        with:
+          show-progress: false
+          sparse-checkout: |
+            shortcut-signing-v45
+          sparse-checkout-cone-mode: true
+
+      - name: Validate and sign Prayer V4.5 with HubSign
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, lzma, plistlib, urllib.request, urllib.error, traceback
+          from pathlib import Path
+
+          log = []
+          try:
+              compressed = base64.b64decode(Path('shortcut-signing-v45/Prayer_Alarm_V45.xz.b64').read_text().strip(), validate=True)
+              raw = lzma.decompress(compressed)
+              source_sha = hashlib.sha256(raw).hexdigest()
+              expected_sha = '36d0c94e809e1056361fea8e702e8d14fd2fe60fae47c9ed4a88a80e317a4fda'
+              if source_sha != expected_sha:
+                  raise ValueError(f'Unexpected source SHA-256: {source_sha}')
+
+              shortcut = plistlib.loads(raw)
+              actions = shortcut.get('WFWorkflowActions', [])
+              questions = shortcut.get('WFWorkflowImportQuestions', [])
+              if len(actions) != 90:
+                  raise ValueError(f'Expected 90 actions, got {len(actions)}')
+              if len(questions) != 5:
+                  raise ValueError(f'Expected 5 import questions, got {len(questions)}')
+
+              ids = [a.get('WFWorkflowActionIdentifier', '') for a in actions]
+              checks = {
+                  'update_alarm_actions': ids.count('com.apple.mobiletimer.UpdateAlarmIntent'),
+                  'create_alarm_actions': ids.count('com.apple.mobiletimer-framework.MobileTimerIntents.MTCreateAlarmIntent'),
+                  'open_url_actions': ids.count('is.workflow.actions.openurl'),
+                  'wait_to_return_actions': ids.count('is.workflow.actions.waittoreturn'),
+                  'delete_alarm_actions': sum('DeleteAlarmIntent' in x for x in ids),
+              }
+              expected = {
+                  'update_alarm_actions': 5,
+                  'create_alarm_actions': 5,
+                  'open_url_actions': 5,
+                  'wait_to_return_actions': 5,
+                  'delete_alarm_actions': 0,
+              }
+              for key, value in expected.items():
+                  if checks[key] != value:
+                      raise ValueError(f'{key}: expected {value}, got {checks[key]}')
+
+              comment = actions[0].get('WFWorkflowActionParameters', {}).get('WFCommentActionText', '')
+              for required in ['ناصر', 'nasser.m.aldawsari@gmail.com', 'تنبيهات الصلوات الخمس']:
+                  if required not in comment:
+                      raise ValueError(f'Missing required end-user text: {required}')
+
+              serialized = plistlib.dumps(shortcut, fmt=plistlib.FMT_XML, sort_keys=False)
+              xml = serialized.decode('utf-8')
+              payload = json.dumps({
+                  'shortcutName': 'منبه الصلوات الذكي V4.5',
+                  'shortcut': xml,
+              }, ensure_ascii=False).encode('utf-8')
+
+              req = urllib.request.Request(
+                  'https://hubsign.routinehub.services/sign',
+                  data=payload,
+                  headers={
+                      'Content-Type': 'application/json',
+                      'User-Agent': 'cherri/2.3.0',
+                      'Accept': '*/*',
+                  },
+                  method='POST',
+              )
+              with urllib.request.urlopen(req, timeout=90) as res:
+                  body = res.read()
+                  log += [
+                      f'status={res.status}',
+                      f'source_sha256={source_sha}',
+                      f'actions={len(actions)}',
+                      f'import_questions={len(questions)}',
+                      *(f'{k}={v}' for k, v in checks.items()),
+                      f'response_bytes={len(body)}',
+                      f'prefix={body[:4]!r}',
+                  ]
+
+              Path('hubsign-response.bin').write_bytes(body)
+              if not body.startswith(b'AEA1'):
+                  raise ValueError('HubSign did not return an AEA1 signed shortcut')
+
+              Path('Prayer_Alarm_Smart_V4_5_Signed.shortcut').write_bytes(body)
+              Path('Prayer_Alarm_Smart_V4_5_Source.shortcut').write_bytes(raw)
+              log += ['signed=true', f'signed_sha256={hashlib.sha256(body).hexdigest()}']
+
+          except urllib.error.HTTPError as e:
+              body = e.read()
+              Path('hubsign-response.bin').write_bytes(body)
+              log += [f'http_error={e.code}', f'body_prefix={body[:1000]!r}']
+              raise
+          except Exception as e:
+              log += [f'exception={type(e).__name__}: {e}', traceback.format_exc()]
+              raise
+          finally:
+              Path('sign-diagnostics.txt').write_text('\n'.join(log), encoding='utf-8')
+              print('\n'.join(log))
+          PY
+
+      - name: Upload signed V4.5 and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Prayer_Alarm_Smart_V4_5_Signed
+          path: |
+            Prayer_Alarm_Smart_V4_5_Signed.shortcut
+            Prayer_Alarm_Smart_V4_5_Source.shortcut
+            sign-diagnostics.txt
+            hubsign-response.bin
+          if-no-files-found: warn
