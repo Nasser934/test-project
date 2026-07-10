@@ -22,21 +22,23 @@ jobs:
       - name: Validate and sign V3 with HubSign
         run: |
           python3 - <<'PY'
-          import base64, hashlib, json, plistlib, urllib.request, urllib.error, traceback
+          import base64, hashlib, json, lzma, plistlib, urllib.request, urllib.error, traceback
           from pathlib import Path
 
           log = []
           try:
-              chunk_dir = Path('shortcut-signing-v3/chunks')
+              chunk_dir = Path('shortcut-signing-v3/lzma')
               parts = [p.read_text().strip() for p in sorted(chunk_dir.glob('part-*.txt'))]
-              if len(parts) != 6:
-                  raise ValueError(f'Expected 6 payload chunks, got {len(parts)}')
+              if len(parts) != 4:
+                  raise ValueError(f'Expected 4 compressed payload chunks, got {len(parts)}')
 
-              raw_b64 = ''.join(parts)
-              raw = base64.b64decode(raw_b64, validate=True)
+              compressed_b64 = ''.join(parts)
+              compressed = base64.b64decode(compressed_b64, validate=True)
+              raw = lzma.decompress(compressed)
               source_sha = hashlib.sha256(raw).hexdigest()
               log += [
                   f'chunks={len(parts)}',
+                  f'compressed_bytes={len(compressed)}',
                   f'source_bytes={len(raw)}',
                   f'source_sha256={source_sha}',
               ]
