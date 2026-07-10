@@ -14,21 +14,27 @@ jobs:
       - name: Patch invalid location action and sign with HubSign
         run: |
           python3 - <<'PY'
-          import base64, hashlib, json, plistlib, urllib.request, urllib.error, traceback
+          import base64, hashlib, json, lzma, plistlib, urllib.request, urllib.error, traceback
           from pathlib import Path
 
           log = []
           try:
-              base = 'https://raw.githubusercontent.com/Nasser934/test-project/temp-sign-prayer-v3-20260710/shortcut-signing-v3/chunks'
+              base = 'https://raw.githubusercontent.com/Nasser934/test-project/temp-sign-prayer-v3-20260710/shortcut-signing-v3/lzma'
               parts = []
-              for i in range(6):
+              for i in range(4):
                   url = f'{base}/part-{i:02d}.txt'
                   with urllib.request.urlopen(url, timeout=60) as r:
                       parts.append(r.read().decode('utf-8').strip())
 
-              raw = base64.b64decode(''.join(parts), validate=True)
+              compressed = base64.b64decode(''.join(parts), validate=True)
+              raw = lzma.decompress(compressed)
               old_sha = hashlib.sha256(raw).hexdigest()
-              log += [f'old_bytes={len(raw)}', f'old_sha256={old_sha}']
+              log += [
+                  f'chunks={len(parts)}',
+                  f'compressed_bytes={len(compressed)}',
+                  f'old_bytes={len(raw)}',
+                  f'old_sha256={old_sha}',
+              ]
               if old_sha != '9047da8deb017d9c522feff893d967d28205a60488fd48dd2901b7990dbfb9a2':
                   raise ValueError(f'Unexpected original SHA-256: {old_sha}')
 
