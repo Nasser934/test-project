@@ -1,4 +1,4 @@
-name: Temp Diagnose Prayer V4
+name: Temp Sign Prayer V4.2 Reliable
 
 on:
   pull_request:
@@ -8,29 +8,227 @@ permissions:
   contents: read
 
 jobs:
-  diagnose:
+  sign:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout V4 source payload
+        uses: actions/checkout@v4
         with:
           show-progress: false
           sparse-checkout: |
             shortcut-signing-v4
           sparse-checkout-cone-mode: true
-      - name: Export V4 structure
+
+      - name: Rebuild fragile logic and sign V4.2
         run: |
           python3 - <<'PY'
-          import base64,lzma,plistlib,json
+          import base64, hashlib, json, lzma, plistlib, urllib.request, urllib.error, traceback
           from pathlib import Path
-          raw=lzma.decompress(base64.b64decode(''.join(p.read_text().strip() for p in sorted(Path('shortcut-signing-v4/lzma').glob('part-*.txt'))), validate=True))
-          s=plistlib.loads(raw)
-          out={'questions':s.get('WFWorkflowImportQuestions',[]),'actions':[]}
-          for i,a in enumerate(s.get('WFWorkflowActions', [])):
-            out['actions'].append({'index':i,'identifier':a.get('WFWorkflowActionIdentifier'),'parameters':a.get('WFWorkflowActionParameters',{})})
-          Path('v4-structure.json').write_text(json.dumps(out,ensure_ascii=False,indent=2,default=str),encoding='utf-8')
+
+          log=[]
+          try:
+              parts=[p.read_text().strip() for p in sorted(Path('shortcut-signing-v4/lzma').glob('part-*.txt'))]
+              if len(parts)!=2:
+                  raise ValueError(f'Expected 2 source chunks, got {len(parts)}')
+              raw=lzma.decompress(base64.b64decode(''.join(parts), validate=True))
+              source_sha=hashlib.sha256(raw).hexdigest()
+              if source_sha!='bdbad92df890adf6e1a945d72d408a6ca159e8b457375a2fc3ac52bddb5645e6':
+                  raise ValueError(f'Unexpected V4 source SHA-256: {source_sha}')
+
+              shortcut=plistlib.loads(raw)
+              actions=shortcut.get('WFWorkflowActions',[])
+              if len(actions)!=50:
+                  raise ValueError(f'Expected 50 source actions, got {len(actions)}')
+
+              # 1) Remove the fragile API code == 200 string comparison input action.
+              code_idx=next(i for i,a in enumerate(actions)
+                            if a.get('WFWorkflowActionIdentifier')=='is.workflow.actions.getvalueforkey'
+                            and a.get('WFWorkflowActionParameters',{}).get('WFDictionaryKey')=='code')
+              code_uuid=actions[code_idx]['WFWorkflowActionParameters'].get('UUID')
+
+              # Find Fajr extraction and outer API conditional before mutating list.
+              fajr_idx=next(i for i,a in enumerate(actions)
+                            if a.get('WFWorkflowActionIdentifier')=='is.workflow.actions.getvalueforkey'
+                            and a.get('WFWorkflowActionParameters',{}).get('WFDictionaryKey')=='data.timings.Fajr')
+              fajr_action=actions[fajr_idx]
+              fajr_uuid=fajr_action['WFWorkflowActionParameters']['UUID']
+              outer_if_idx=next(i for i,a in enumerate(actions)
+                                if a.get('WFWorkflowActionIdentifier')=='is.workflow.actions.conditional'
+                                and a.get('WFWorkflowActionParameters',{}).get('WFControlFlowMode')==0
+                                and a.get('WFWorkflowActionParameters',{}).get('WFConditionalActionString')=='200')
+              outer_if=actions[outer_if_idx]
+
+              # Remove Fajr from its old position and code action, then insert Fajr immediately before outer If.
+              for idx in sorted([code_idx,fajr_idx], reverse=True):
+                  actions.pop(idx)
+              outer_if_idx=actions.index(outer_if)
+              actions.insert(outer_if_idx, fajr_action)
+
+              # Replace string comparison with a value-exists check. No comparison literal can go blank on import.
+              op=outer_if['WFWorkflowActionParameters']
+              op['WFCondition']=100
+              op.pop('WFConditionalActionString',None)
+              op.pop('WFNumberValue',None)
+              op['WFInput']={
+                  'Type':'Variable',
+                  'Variable':{
+                      'Value':{'OutputUUID':fajr_uuid,'Type':'ActionOutput','OutputName':'Dictionary Value'},
+                      'WFSerializationType':'WFTextTokenAttachment'
+                  }
+              }
+
+              # 2) Convert the two alert-mode dictionaries into sparse presence maps.
+              #    Alarm map keeps 1 and 3. Reminder map keeps 2 and 3.
+              sparse_maps=[]
+              for a in actions:
+                  if a.get('WFWorkflowActionIdentifier')!='is.workflow.actions.dictionary':
+                      continue
+                  items=a.get('WFWorkflowActionParameters',{}).get('WFItems',{}).get('Value',{}).get('WFDictionaryFieldValueItems',[])
+                  pairs=[]
+                  for item in items:
+                      k=item.get('WFKey',{}).get('Value',{}).get('string')
+                      v=item.get('WFValue',{}).get('Value',{}).get('string')
+                      if k in {'1','2','3'} and v in {'نعم','لا'}:
+                          pairs.append((k,v))
+                  if len(pairs)==3:
+                      kept=[]
+                      for item in items:
+                          k=item.get('WFKey',{}).get('Value',{}).get('string')
+                          v=item.get('WFValue',{}).get('Value',{}).get('string')
+                          if v=='نعم':
+                              item['WFValue']={'Value':{'string':'1','attachmentsByRange':{}},'WFSerializationType':'WFTextTokenString'}
+                              kept.append(item)
+                      a['WFWorkflowActionParameters']['WFItems']['Value']['WFDictionaryFieldValueItems']=kept
+                      sparse_maps.append(sorted(item['WFKey']['Value']['string'] for item in kept))
+              if sorted(sparse_maps)!=[['1','3'],['2','3']]:
+                  raise ValueError(f'Unexpected sparse alert maps: {sparse_maps}')
+
+              # 3) Replace every remaining "== نعم" conditional with "has any value".
+              yes_patched=0
+              for a in actions:
+                  if a.get('WFWorkflowActionIdentifier')!='is.workflow.actions.conditional':
+                      continue
+                  p=a.get('WFWorkflowActionParameters',{})
+                  if p.get('WFControlFlowMode')==0 and p.get('WFConditionalActionString')=='نعم':
+                      p['WFCondition']=100
+                      p.pop('WFConditionalActionString',None)
+                      p.pop('WFNumberValue',None)
+                      yes_patched+=1
+              if yes_patched!=2:
+                  raise ValueError(f'Expected 2 alert-mode conditionals patched, got {yes_patched}')
+
+              # 4) Make alarm cleanup target only alarms created by this shortcut.
+              alarm_filters=0
+              for a in actions:
+                  if a.get('WFWorkflowActionIdentifier')=='com.apple.mobiletimer-framework.MobileTimerIntents.MTGetAlarmsIntent':
+                      templates=a.get('WFWorkflowActionParameters',{}).get('WFContentItemFilter',{}).get('Value',{}).get('WFActionParameterFilterTemplates',[])
+                      for t in templates:
+                          vals=t.get('Values',{})
+                          if vals.get('String')=='صلاة ':
+                              vals['String']='🕌 صلاة '
+                              alarm_filters+=1
+              if alarm_filters!=1:
+                  raise ValueError(f'Expected one alarm cleanup filter patch, got {alarm_filters}')
+
+              # Update user-facing version text.
+              shortcut['WFWorkflowName']='منبّه الصلوات الذكي V4.2'
+              for a in actions:
+                  if a.get('WFWorkflowActionIdentifier')=='is.workflow.actions.comment':
+                      txt=a.get('WFWorkflowActionParameters',{}).get('WFCommentActionText','')
+                      if 'V4' in txt:
+                          a['WFWorkflowActionParameters']['WFCommentActionText']=txt.replace('V4','V4.2')
+                  if a.get('WFWorkflowActionIdentifier')=='is.workflow.actions.addnewreminder':
+                      notes=a.get('WFWorkflowActionParameters',{}).get('WFCalendarItemNotes','')
+                      if 'V4' in notes:
+                          a['WFWorkflowActionParameters']['WFCalendarItemNotes']=notes.replace('V4','V4.2')
+
+              shortcut['WFWorkflowActions']=actions
+
+              # Deep structural validation focused on the failures seen on iPhone.
+              if len(actions)!=49:
+                  raise ValueError(f'Expected 49 final actions, got {len(actions)}')
+              if any(a.get('WFWorkflowActionIdentifier')=='is.workflow.actions.getvalueforkey' and a.get('WFWorkflowActionParameters',{}).get('WFDictionaryKey')=='code' for a in actions):
+                  raise ValueError('Legacy API code extraction still present')
+              if any(a.get('WFWorkflowActionIdentifier')=='is.workflow.actions.geolocation.get' for a in actions):
+                  raise ValueError('Unsupported location action present')
+
+              cond_starts=[]
+              for i,a in enumerate(actions):
+                  if a.get('WFWorkflowActionIdentifier')!='is.workflow.actions.conditional':
+                      continue
+                  p=a.get('WFWorkflowActionParameters',{})
+                  if p.get('WFControlFlowMode')==0:
+                      cond_starts.append((i,p.get('WFCondition')))
+                      if p.get('WFCondition')!=100:
+                          raise ValueError(f'Fragile comparison conditional remains at {i}: {p.get("WFCondition")}')
+                      if 'WFInput' not in p:
+                          raise ValueError(f'Missing conditional input at {i}')
+                      if 'WFConditionalActionString' in p:
+                          raise ValueError(f'String comparison literal remains at {i}')
+              if len(cond_starts)!=3:
+                  raise ValueError(f'Expected 3 condition starts, got {cond_starts}')
+
+              # Validate order: Fajr extraction must be immediately before the outer success check.
+              final_fajr_idx=next(i for i,a in enumerate(actions) if a.get('WFWorkflowActionIdentifier')=='is.workflow.actions.getvalueforkey' and a.get('WFWorkflowActionParameters',{}).get('WFDictionaryKey')=='data.timings.Fajr')
+              final_outer_idx=next(i for i,a in enumerate(actions) if a is outer_if)
+              if final_outer_idx!=final_fajr_idx+1:
+                  raise ValueError(f'Fajr/outer-if order invalid: {final_fajr_idx}, {final_outer_idx}')
+
+              # Round-trip through XML because HubSign receives XML, then validate again.
+              xml=plistlib.dumps(shortcut,fmt=plistlib.FMT_XML,sort_keys=False)
+              roundtrip=plistlib.loads(xml)
+              rt_actions=roundtrip.get('WFWorkflowActions',[])
+              if len(rt_actions)!=49:
+                  raise ValueError('XML round-trip changed action count')
+              for i,a in enumerate(rt_actions):
+                  if a.get('WFWorkflowActionIdentifier')=='is.workflow.actions.conditional':
+                      p=a.get('WFWorkflowActionParameters',{})
+                      if p.get('WFControlFlowMode')==0 and (p.get('WFCondition')!=100 or 'WFInput' not in p):
+                          raise ValueError(f'Round-trip conditional invalid at {i}')
+
+              patched_raw=plistlib.dumps(shortcut,fmt=plistlib.FMT_BINARY,sort_keys=False)
+              patched_sha=hashlib.sha256(patched_raw).hexdigest()
+              Path('Prayer_Alarm_Smart_V4_2_Source.shortcut').write_bytes(patched_raw)
+              Path('v4.2-validation.json').write_text(json.dumps({
+                  'source_sha256':source_sha,
+                  'patched_sha256':patched_sha,
+                  'actions':len(actions),
+                  'condition_starts':cond_starts,
+                  'string_conditionals_remaining':0,
+                  'api_code_action_removed':True,
+                  'alarm_filter':'🕌 صلاة ',
+                  'import_questions':len(shortcut.get('WFWorkflowImportQuestions',[])),
+              },ensure_ascii=False,indent=2),encoding='utf-8')
+
+              payload=json.dumps({'shortcutName':'منبّه الصلوات الذكي V4.2','shortcut':xml.decode('utf-8')},ensure_ascii=False).encode('utf-8')
+              req=urllib.request.Request('https://hubsign.routinehub.services/sign',data=payload,headers={'Content-Type':'application/json','User-Agent':'cherri/2.3.0','Accept':'*/*'},method='POST')
+              with urllib.request.urlopen(req,timeout=90) as res:
+                  body=res.read()
+                  log += [f'status={res.status}',f'content_type={res.headers.get("Content-Type")}',f'response_bytes={len(body)}',f'prefix={body[:16]!r}']
+              Path('hubsign-response.bin').write_bytes(body)
+              if not body.startswith(b'AEA1'):
+                  raise ValueError('HubSign did not return AEA1')
+              Path('Prayer_Alarm_Smart_V4_2_Signed.shortcut').write_bytes(body)
+              log += [f'actions={len(actions)}',f'patched_sha256={patched_sha}',f'signed_sha256={hashlib.sha256(body).hexdigest()}','signed=true']
+          except urllib.error.HTTPError as e:
+              body=e.read(); Path('hubsign-response.bin').write_bytes(body)
+              log += [f'http_error={e.code}',f'body_prefix={body[:1000]!r}']; raise
+          except Exception as e:
+              log += [f'exception={type(e).__name__}: {e}',traceback.format_exc()]; raise
+          finally:
+              Path('sign-diagnostics.txt').write_text('\n'.join(log),encoding='utf-8')
+              print('\n'.join(log))
           PY
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload signed V4.2 and validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: v4-structure
-          path: v4-structure.json
-          if-no-files-found: error
+          name: Prayer_Alarm_Smart_V4_2_Reliable
+          path: |
+            Prayer_Alarm_Smart_V4_2_Signed.shortcut
+            Prayer_Alarm_Smart_V4_2_Source.shortcut
+            v4.2-validation.json
+            sign-diagnostics.txt
+            hubsign-response.bin
+          if-no-files-found: warn
