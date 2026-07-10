@@ -17,19 +17,20 @@ jobs:
           sparse-checkout: |
             shortcut-signing-v4
           sparse-checkout-cone-mode: true
-      - name: Print concise V4 structure
+      - name: Export V4 structure
         run: |
           python3 - <<'PY'
           import base64,lzma,plistlib,json
           from pathlib import Path
           raw=lzma.decompress(base64.b64decode(''.join(p.read_text().strip() for p in sorted(Path('shortcut-signing-v4/lzma').glob('part-*.txt'))), validate=True))
           s=plistlib.loads(raw)
-          print('QUESTIONS')
-          for q in s.get('WFWorkflowImportQuestions',[]): print(json.dumps(q,ensure_ascii=False,default=str))
-          print('ACTIONS')
+          out={'questions':s.get('WFWorkflowImportQuestions',[]),'actions':[]}
           for i,a in enumerate(s.get('WFWorkflowActions', [])):
-            p=a.get('WFWorkflowActionParameters',{})
-            ident=a.get('WFWorkflowActionIdentifier')
-            if ident in ['is.workflow.actions.conditional','is.workflow.actions.getvalueforkey','is.workflow.actions.adjustdate','is.workflow.actions.number','is.workflow.actions.gettext','is.workflow.actions.downloadurl','is.workflow.actions.getcurrentlocation'] or 10<=i<=35:
-              print(i,ident,json.dumps(p,ensure_ascii=False,default=str))
+            out['actions'].append({'index':i,'identifier':a.get('WFWorkflowActionIdentifier'),'parameters':a.get('WFWorkflowActionParameters',{})})
+          Path('v4-structure.json').write_text(json.dumps(out,ensure_ascii=False,indent=2,default=str),encoding='utf-8')
           PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v4-structure
+          path: v4-structure.json
+          if-no-files-found: error
