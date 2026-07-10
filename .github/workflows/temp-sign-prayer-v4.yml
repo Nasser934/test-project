@@ -11,27 +11,25 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout V4 payload only
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           show-progress: false
           sparse-checkout: |
             shortcut-signing-v4
           sparse-checkout-cone-mode: true
-
-      - name: Print V4 action structure
+      - name: Print concise V4 structure
         run: |
           python3 - <<'PY'
-          import base64, lzma, plistlib, json
+          import base64,lzma,plistlib,json
           from pathlib import Path
-          parts = [p.read_text().strip() for p in sorted(Path('shortcut-signing-v4/lzma').glob('part-*.txt'))]
-          raw = lzma.decompress(base64.b64decode(''.join(parts), validate=True))
-          s = plistlib.loads(raw)
-          print('ACTIONS', len(s.get('WFWorkflowActions', [])))
-          print('QUESTIONS', json.dumps(s.get('WFWorkflowImportQuestions', []), ensure_ascii=False, default=str))
+          raw=lzma.decompress(base64.b64decode(''.join(p.read_text().strip() for p in sorted(Path('shortcut-signing-v4/lzma').glob('part-*.txt'))), validate=True))
+          s=plistlib.loads(raw)
+          print('QUESTIONS')
+          for q in s.get('WFWorkflowImportQuestions',[]): print(json.dumps(q,ensure_ascii=False,default=str))
+          print('ACTIONS')
           for i,a in enumerate(s.get('WFWorkflowActions', [])):
-              ident=a.get('WFWorkflowActionIdentifier')
-              p=a.get('WFWorkflowActionParameters',{})
-              out={k:p.get(k) for k in ['WFControlFlowMode','GroupingIdentifier','WFCondition','WFConditionalActionString','WFNumberValue','WFDictionaryKey','WFVariableName','WFInputType','WFAskActionPrompt','WFAskActionDefaultAnswer','WFAdjustOperation','WFURLActionURL','WFNotificationActionTitle'] if k in p}
-              print(f'{i:02d} {ident} {json.dumps(out, ensure_ascii=False, default=str)}')
+            p=a.get('WFWorkflowActionParameters',{})
+            ident=a.get('WFWorkflowActionIdentifier')
+            if ident in ['is.workflow.actions.conditional','is.workflow.actions.getvalueforkey','is.workflow.actions.adjustdate','is.workflow.actions.number','is.workflow.actions.gettext','is.workflow.actions.downloadurl','is.workflow.actions.getcurrentlocation'] or 10<=i<=35:
+              print(i,ident,json.dumps(p,ensure_ascii=False,default=str))
           PY
