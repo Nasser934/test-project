@@ -27,7 +27,11 @@ jobs:
 
           log = []
           try:
-              compressed = base64.b64decode(Path('shortcut-signing-v49/Prayer_Alarm_V49.xz.b64').read_text().strip(), validate=True)
+              encoded = Path('shortcut-signing-v49/Prayer_Alarm_V49.xz.b64').read_text().strip()
+              pad = encoded.find('==')
+              if pad >= 0:
+                  encoded = encoded[:pad + 2]
+              compressed = base64.b64decode(encoded, validate=True)
               raw = lzma.decompress(compressed)
               shortcut = plistlib.loads(raw)
               actions = shortcut.get('WFWorkflowActions', [])
