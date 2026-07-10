@@ -1,0 +1,115 @@
+name: Temp Sign Prayer V4.4
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout V4.4 payload only
+        uses: actions/checkout@v4
+        with:
+          show-progress: false
+          sparse-checkout: |
+            shortcut-signing-v44
+          sparse-checkout-cone-mode: true
+
+      - name: Validate and sign Prayer V4.4 with HubSign
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, lzma, plistlib, urllib.request, urllib.error, traceback
+          from pathlib import Path
+
+          log = []
+          try:
+              compressed = base64.b64decode(Path('shortcut-signing-v44/Prayer_Alarm_V44.xz.b64').read_text().strip(), validate=True)
+              raw = lzma.decompress(compressed)
+              source_sha = hashlib.sha256(raw).hexdigest()
+              expected_sha = 'cbe2b9a871355b4fe29e2f57ec25497dc5d0d748b98dcc9c190f12d2980f8eb2'
+              if source_sha != expected_sha:
+                  raise ValueError(f'Unexpected source SHA-256: {source_sha}')
+
+              shortcut = plistlib.loads(raw)
+              actions = shortcut.get('WFWorkflowActions', [])
+              questions = shortcut.get('WFWorkflowImportQuestions', [])
+              if len(actions) != 35:
+                  raise ValueError(f'Expected 35 actions, got {len(actions)}')
+              if len(questions) != 5:
+                  raise ValueError(f'Expected 5 import questions, got {len(questions)}')
+              if shortcut.get('WFWorkflowName') != 'منبه الصلوات الذكي V4.4':
+                  raise ValueError('Unexpected workflow name')
+
+              comment = actions[0].get('WFWorkflowActionParameters', {}).get('WFCommentActionText', '')
+              for required in ['" ناصر "', 'nasser.m.aldawsari@gmail.com', 'تنبيهات الصلوات الخمس']:
+                  if required not in comment:
+                      raise ValueError(f'Missing required end-user text: {required}')
+
+              serialized = plistlib.dumps(shortcut, fmt=plistlib.FMT_XML, sort_keys=False)
+              text = serialized.decode('utf-8')
+              if 'منبّه' in text or 'منبّهات' in text:
+                  raise ValueError('Old alarm spelling remains in user-visible source')
+
+              xml = text
+              payload = json.dumps({
+                  'shortcutName': 'منبه الصلوات الذكي V4.4',
+                  'shortcut': xml,
+              }, ensure_ascii=False).encode('utf-8')
+
+              req = urllib.request.Request(
+                  'https://hubsign.routinehub.services/sign',
+                  data=payload,
+                  headers={
+                      'Content-Type': 'application/json',
+                      'User-Agent': 'cherri/2.3.0',
+                      'Accept': '*/*',
+                  },
+                  method='POST',
+              )
+              with urllib.request.urlopen(req, timeout=90) as res:
+                  body = res.read()
+                  log += [
+                      f'status={res.status}',
+                      f'source_sha256={source_sha}',
+                      f'actions={len(actions)}',
+                      f'import_questions={len(questions)}',
+                      f'response_bytes={len(body)}',
+                      f'prefix={body[:4]!r}',
+                  ]
+
+              Path('hubsign-response.bin').write_bytes(body)
+              if not body.startswith(b'AEA1'):
+                  raise ValueError('HubSign did not return an AEA1 signed shortcut')
+
+              Path('Prayer_Alarm_Smart_V4_4_Signed.shortcut').write_bytes(body)
+              Path('Prayer_Alarm_Smart_V4_4_Source.shortcut').write_bytes(raw)
+              log += ['signed=true', f'signed_sha256={hashlib.sha256(body).hexdigest()}']
+
+          except urllib.error.HTTPError as e:
+              body = e.read()
+              Path('hubsign-response.bin').write_bytes(body)
+              log += [f'http_error={e.code}', f'body_prefix={body[:1000]!r}']
+              raise
+          except Exception as e:
+              log += [f'exception={type(e).__name__}: {e}', traceback.format_exc()]
+              raise
+          finally:
+              Path('sign-diagnostics.txt').write_text('\n'.join(log), encoding='utf-8')
+              print('\n'.join(log))
+          PY
+
+      - name: Upload signed V4.4 and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Prayer_Alarm_Smart_V4_4_Signed
+          path: |
+            Prayer_Alarm_Smart_V4_4_Signed.shortcut
+            Prayer_Alarm_Smart_V4_4_Source.shortcut
+            sign-diagnostics.txt
+            hubsign-response.bin
+          if-no-files-found: warn
