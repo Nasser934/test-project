@@ -11,34 +11,122 @@ jobs:
   sign:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout V4.9 payload only
-        uses: actions/checkout@v4
-        with:
-          show-progress: false
-          sparse-checkout: |
-            shortcut-signing-v49
-          sparse-checkout-cone-mode: true
-
       - name: Validate and sign Prayer V4.9 with HubSign
         run: |
           python3 - <<'PY'
-          import base64, hashlib, json, lzma, plistlib, urllib.request, urllib.error, traceback
+          import base64, copy, hashlib, json, lzma, plistlib, urllib.request, urllib.error, traceback, uuid
           from pathlib import Path
 
           log = []
+          def U():
+              return str(uuid.uuid4()).upper()
+
           try:
-              encoded = Path('shortcut-signing-v49/Prayer_Alarm_V49.xz.b64').read_text().strip()
-              pad = encoded.find('==')
-              if pad >= 0:
-                  encoded = encoded[:pad + 2]
+              source_url = 'https://raw.githubusercontent.com/Nasser934/test-project/temp-sign-prayer-v48-20260710/shortcut-signing-v47/Prayer_Alarm_V47.xz.b64'
+              with urllib.request.urlopen(source_url, timeout=60) as res:
+                  encoded = res.read().decode('utf-8').strip()
               compressed = base64.b64decode(encoded, validate=True)
               raw = lzma.decompress(compressed)
               shortcut = plistlib.loads(raw)
-              actions = shortcut.get('WFWorkflowActions', [])
+              old = shortcut.get('WFWorkflowActions', [])
               questions = shortcut.get('WFWorkflowImportQuestions', [])
+              if len(old) != 68:
+                  raise ValueError(f'Expected 68 V4.7 source actions, found {len(old)}')
 
+              new_actions = copy.deepcopy(old[:21])
+
+              find_all = copy.deepcopy(old[21])
+              fp = find_all['WFWorkflowActionParameters']
+              find_uuid = U()
+              fp['UUID'] = find_uuid
+              fp['WFContentItemLimitNumber'] = 1
+              fp['WFContentItemLimitEnabled'] = False
+              fp['ShowWhenRun'] = False
+              filt = fp['WFContentItemFilter']['Value']['WFActionParameterFilterTemplates'][0]
+              filt['Operator'] = 99
+              filt['Values'] = {'String': '🕌 صلاة ', 'Unit': 4}
+              new_actions.append(find_all)
+
+              group = U()
+              new_actions.append({
+                  'WFWorkflowActionIdentifier': 'is.workflow.actions.conditional',
+                  'WFWorkflowActionParameters': {
+                      'WFControlFlowMode': 0,
+                      'GroupingIdentifier': group,
+                      'WFInput': {
+                          'Type': 'Variable',
+                          'Variable': {
+                              'Value': {
+                                  'OutputUUID': find_uuid,
+                                  'Type': 'ActionOutput',
+                                  'OutputName': 'Alarms',
+                              },
+                              'WFSerializationType': 'WFTextTokenAttachment',
+                          },
+                      },
+                      'WFCondition': 100,
+                  },
+              })
+
+              delete_action = copy.deepcopy(old[23])
+              dp = delete_action['WFWorkflowActionParameters']
+              dp['UUID'] = U()
+              dp['entities'] = {
+                  'Value': {
+                      'OutputUUID': find_uuid,
+                      'Type': 'ActionOutput',
+                      'OutputName': 'Alarms',
+                  },
+                  'WFSerializationType': 'WFTextTokenAttachment',
+              }
+              dp['ShowWhenRun'] = False
+              new_actions.append(delete_action)
+
+              new_actions.append({
+                  'WFWorkflowActionIdentifier': 'is.workflow.actions.conditional',
+                  'WFWorkflowActionParameters': {
+                      'WFControlFlowMode': 2,
+                      'GroupingIdentifier': group,
+                      'UUID': U(),
+                  },
+              })
+
+              for idx in [24, 31, 38, 45, 52]:
+                  action = copy.deepcopy(old[idx])
+                  action['WFWorkflowActionParameters']['UUID'] = U()
+                  action['WFWorkflowActionParameters']['ShowWhenRun'] = False
+                  new_actions.append(action)
+
+              for idx in [64, 65, 66, 67]:
+                  new_actions.append(copy.deepcopy(old[idx]))
+
+              shortcut['WFWorkflowActions'] = new_actions
               shortcut['WFWorkflowName'] = 'منبه الصلوات الذكي V4.9'
+              shortcut['WFWorkflowActions'][0]['WFWorkflowActionParameters']['WFCommentActionText'] = '''🌙 منبه الصلوات الذكي
 
+يضبط هذا الاختصار تنبيهات الصلوات الخمس تلقائيًا حسب موقعك الحالي.
+
+• يحدد أوقات الصلاة من موقعك الحالي.
+• يمكنك تقديم أو تأخير تنبيه كل صلاة بالدقائق.
+• 0 = وقت الصلاة نفسه.
+• -10 = قبل الصلاة بـ 10 دقائق.
+• 10 = بعد الصلاة بـ 10 دقائق.
+• عند كل تشغيل يحذف تنبيهات الصلاة السابقة دفعة واحدة، ثم ينشئ خمسة تنبيهات بالأوقات الجديدة.
+• لا يفتح تطبيق الساعة ولا يطلب الانتقال إلى إعداد الصوت.
+• لا يحذف تنبيهاتك الشخصية الأخرى.
+• يعمل من خلال منبهات الساعة حتى مع وضع الصامت أو عدم الإزعاج، بشرط ألا يكون صوت المنبه مضبوطًا على «بلا».
+• إذا تعذر الاتصال بالإنترنت أو تحديد الموقع يتوقف التشغيل دون إنشاء أوقات خاطئة.
+
+شغّل الاختصار يدويًا أول مرة وامنحه الصلاحيات المطلوبة، ثم فعّل الأتمتة اليومية.
+
+تم إنشاؤه من:
+ناصر
+ادعوا له ولوالديه وأهله
+
+للتواصل أو التنبيه عن أي مشكلة:
+nasser.m.aldawsari@gmail.com'''
+
+              actions = shortcut['WFWorkflowActions']
               ids = [a.get('WFWorkflowActionIdentifier') for a in actions]
               delete_count = ids.count('com.apple.mobiletimer.DeleteAlarmIntent')
               create_count = ids.count('com.apple.mobiletimer-framework.MobileTimerIntents.MTCreateAlarmIntent')
@@ -65,29 +153,11 @@ jobs:
               if present_forbidden:
                   raise ValueError(f'Interactive/unsupported actions remain: {present_forbidden}')
 
-              find_action = next(a for a in actions if a.get('WFWorkflowActionIdentifier') == 'com.apple.mobiletimer-framework.MobileTimerIntents.MTGetAlarmsIntent')
-              find_params = find_action.get('WFWorkflowActionParameters', {})
-              find_uuid = find_params.get('UUID')
-              if find_params.get('WFContentItemLimitEnabled') is not False:
-                  raise ValueError('Find Alarms must return all matching prayer alarms')
-              filters = find_params.get('WFContentItemFilter', {}).get('Value', {}).get('WFActionParameterFilterTemplates', [])
-              if len(filters) != 1:
-                  raise ValueError('Unexpected Find Alarms filter count')
-              filt = filters[0]
-              if filt.get('Property') != 'label' or filt.get('Operator') != 99:
-                  raise ValueError(f'Expected label begins-with filter: {filt}')
-              if filt.get('Values', {}).get('String') != '🕌 صلاة ':
-                  raise ValueError(f'Unexpected prayer alarm prefix: {filt}')
-
-              delete_action = next(a for a in actions if a.get('WFWorkflowActionIdentifier') == 'com.apple.mobiletimer.DeleteAlarmIntent')
-              delete_value = delete_action.get('WFWorkflowActionParameters', {}).get('entities', {}).get('Value', {})
-              if delete_value.get('Type') != 'ActionOutput' or delete_value.get('OutputUUID') != find_uuid:
-                  raise ValueError(f'Bulk delete is not connected to Find Alarms output: {delete_value}')
-
-              labels = []
-              for a in actions:
-                  if a.get('WFWorkflowActionIdentifier') == 'com.apple.mobiletimer-framework.MobileTimerIntents.MTCreateAlarmIntent':
-                      labels.append(a.get('WFWorkflowActionParameters', {}).get('label'))
+              labels = [
+                  a.get('WFWorkflowActionParameters', {}).get('label')
+                  for a in actions
+                  if a.get('WFWorkflowActionIdentifier') == 'com.apple.mobiletimer-framework.MobileTimerIntents.MTCreateAlarmIntent'
+              ]
               expected_labels = ['🕌 صلاة الفجر', '🕌 صلاة الظهر', '🕌 صلاة العصر', '🕌 صلاة المغرب', '🕌 صلاة العشاء']
               if labels != expected_labels:
                   raise ValueError(f'Unexpected alarm labels/order: {labels}')
@@ -142,8 +212,6 @@ jobs:
                       f'delete_actions={delete_count}',
                       f'create_actions={create_count}',
                       f'forbidden_actions={present_forbidden}',
-                      f'find_uuid={find_uuid}',
-                      f'delete_output_uuid={delete_value.get("OutputUUID")}',
                       f'labels={labels}',
                       f'response_bytes={len(body)}',
                       f'prefix={body[:4]!r}',
