@@ -1,0 +1,178 @@
+name: Temp Sign Prayer V4.9
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout V4.9 payload only
+        uses: actions/checkout@v4
+        with:
+          show-progress: false
+          sparse-checkout: |
+            shortcut-signing-v49
+          sparse-checkout-cone-mode: true
+
+      - name: Validate and sign Prayer V4.9 with HubSign
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, lzma, plistlib, urllib.request, urllib.error, traceback
+          from pathlib import Path
+
+          log = []
+          try:
+              compressed = base64.b64decode(Path('shortcut-signing-v49/Prayer_Alarm_V49.xz.b64').read_text().strip(), validate=True)
+              raw = lzma.decompress(compressed)
+              shortcut = plistlib.loads(raw)
+              actions = shortcut.get('WFWorkflowActions', [])
+              questions = shortcut.get('WFWorkflowImportQuestions', [])
+
+              shortcut['WFWorkflowName'] = 'منبه الصلوات الذكي V4.9'
+
+              ids = [a.get('WFWorkflowActionIdentifier') for a in actions]
+              delete_count = ids.count('com.apple.mobiletimer.DeleteAlarmIntent')
+              create_count = ids.count('com.apple.mobiletimer-framework.MobileTimerIntents.MTCreateAlarmIntent')
+              find_count = ids.count('com.apple.mobiletimer-framework.MobileTimerIntents.MTGetAlarmsIntent')
+              forbidden = {
+                  'is.workflow.actions.choosefrommenu',
+                  'is.workflow.actions.alert',
+                  'is.workflow.actions.url',
+                  'is.workflow.actions.openurl',
+                  'is.workflow.actions.openurls',
+                  'is.workflow.actions.waittoreturn',
+                  'com.apple.mobiletimer.UpdateAlarmIntent',
+              }
+              present_forbidden = sorted(set(ids) & forbidden)
+
+              if len(actions) != 34:
+                  raise ValueError(f'Expected 34 actions, found {len(actions)}')
+              if delete_count != 1:
+                  raise ValueError(f'Expected one bulk delete action, found {delete_count}')
+              if create_count != 5:
+                  raise ValueError(f'Expected five create actions, found {create_count}')
+              if find_count != 1:
+                  raise ValueError(f'Expected one Find Alarms action, found {find_count}')
+              if present_forbidden:
+                  raise ValueError(f'Interactive/unsupported actions remain: {present_forbidden}')
+
+              find_action = next(a for a in actions if a.get('WFWorkflowActionIdentifier') == 'com.apple.mobiletimer-framework.MobileTimerIntents.MTGetAlarmsIntent')
+              find_params = find_action.get('WFWorkflowActionParameters', {})
+              find_uuid = find_params.get('UUID')
+              if find_params.get('WFContentItemLimitEnabled') is not False:
+                  raise ValueError('Find Alarms must return all matching prayer alarms')
+              filters = find_params.get('WFContentItemFilter', {}).get('Value', {}).get('WFActionParameterFilterTemplates', [])
+              if len(filters) != 1:
+                  raise ValueError('Unexpected Find Alarms filter count')
+              filt = filters[0]
+              if filt.get('Property') != 'label' or filt.get('Operator') != 99:
+                  raise ValueError(f'Expected label begins-with filter: {filt}')
+              if filt.get('Values', {}).get('String') != '🕌 صلاة ':
+                  raise ValueError(f'Unexpected prayer alarm prefix: {filt}')
+
+              delete_action = next(a for a in actions if a.get('WFWorkflowActionIdentifier') == 'com.apple.mobiletimer.DeleteAlarmIntent')
+              delete_value = delete_action.get('WFWorkflowActionParameters', {}).get('entities', {}).get('Value', {})
+              if delete_value.get('Type') != 'ActionOutput' or delete_value.get('OutputUUID') != find_uuid:
+                  raise ValueError(f'Bulk delete is not connected to Find Alarms output: {delete_value}')
+
+              labels = []
+              for a in actions:
+                  if a.get('WFWorkflowActionIdentifier') == 'com.apple.mobiletimer-framework.MobileTimerIntents.MTCreateAlarmIntent':
+                      labels.append(a.get('WFWorkflowActionParameters', {}).get('label'))
+              expected_labels = ['🕌 صلاة الفجر', '🕌 صلاة الظهر', '🕌 صلاة العصر', '🕌 صلاة المغرب', '🕌 صلاة العشاء']
+              if labels != expected_labels:
+                  raise ValueError(f'Unexpected alarm labels/order: {labels}')
+
+              action_uuids = {
+                  a.get('WFWorkflowActionParameters', {}).get('UUID')
+                  for a in actions
+                  if a.get('WFWorkflowActionParameters', {}).get('UUID')
+              }
+              refs = []
+              def walk(x):
+                  if isinstance(x, dict):
+                      for k, v in x.items():
+                          if k == 'OutputUUID' and isinstance(v, str):
+                              refs.append(v)
+                          walk(v)
+                  elif isinstance(x, list):
+                      for v in x:
+                          walk(v)
+              walk(actions)
+              missing = sorted(set(refs) - action_uuids)
+              if missing:
+                  raise ValueError(f'Unresolved ActionOutput UUIDs: {missing}')
+
+              serialized = plistlib.dumps(shortcut, fmt=plistlib.FMT_XML, sort_keys=False)
+              source_sha = hashlib.sha256(serialized).hexdigest()
+              Path('Prayer_Alarm_Smart_V4_9_Source.shortcut').write_bytes(serialized)
+
+              payload = json.dumps({
+                  'shortcutName': 'منبه الصلوات الذكي V4.9',
+                  'shortcut': serialized.decode('utf-8'),
+              }, ensure_ascii=False).encode('utf-8')
+
+              req = urllib.request.Request(
+                  'https://hubsign.routinehub.services/sign',
+                  data=payload,
+                  headers={
+                      'Content-Type': 'application/json',
+                      'User-Agent': 'cherri/2.3.0',
+                      'Accept': '*/*',
+                  },
+                  method='POST',
+              )
+              with urllib.request.urlopen(req, timeout=90) as res:
+                  body = res.read()
+                  log += [
+                      f'status={res.status}',
+                      f'source_sha256={source_sha}',
+                      f'actions={len(actions)}',
+                      f'import_questions={len(questions)}',
+                      f'find_alarm_actions={find_count}',
+                      f'delete_actions={delete_count}',
+                      f'create_actions={create_count}',
+                      f'forbidden_actions={present_forbidden}',
+                      f'find_uuid={find_uuid}',
+                      f'delete_output_uuid={delete_value.get("OutputUUID")}',
+                      f'labels={labels}',
+                      f'response_bytes={len(body)}',
+                      f'prefix={body[:4]!r}',
+                  ]
+
+              Path('hubsign-response.bin').write_bytes(body)
+              if not body.startswith(b'AEA1'):
+                  raise ValueError('HubSign did not return an AEA1 signed shortcut')
+
+              Path('Prayer_Alarm_Smart_V4_9_Signed.shortcut').write_bytes(body)
+              log += ['signed=true', f'signed_sha256={hashlib.sha256(body).hexdigest()}']
+
+          except urllib.error.HTTPError as e:
+              body = e.read()
+              Path('hubsign-response.bin').write_bytes(body)
+              log += [f'http_error={e.code}', f'body_prefix={body[:1000]!r}']
+              raise
+          except Exception as e:
+              log += [f'exception={type(e).__name__}: {e}', traceback.format_exc()]
+              raise
+          finally:
+              Path('sign-diagnostics.txt').write_text('\n'.join(log), encoding='utf-8')
+              print('\n'.join(log))
+          PY
+
+      - name: Upload signed V4.9 and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Prayer_Alarm_Smart_V4_9_Signed
+          path: |
+            Prayer_Alarm_Smart_V4_9_Signed.shortcut
+            Prayer_Alarm_Smart_V4_9_Source.shortcut
+            sign-diagnostics.txt
+            hubsign-response.bin
+          if-no-files-found: warn
