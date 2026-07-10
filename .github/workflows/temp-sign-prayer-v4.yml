@@ -1,4 +1,4 @@
-name: Temp Sign Prayer V4
+name: Temp Diagnose Prayer V4
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  sign:
+  diagnose:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout V4 payload only
@@ -19,118 +19,19 @@ jobs:
             shortcut-signing-v4
           sparse-checkout-cone-mode: true
 
-      - name: Validate and sign Prayer V4 with HubSign
+      - name: Print V4 action structure
         run: |
           python3 - <<'PY'
-          import base64, hashlib, json, lzma, plistlib, urllib.request, urllib.error, traceback
+          import base64, lzma, plistlib, json
           from pathlib import Path
-
-          log = []
-          try:
-              parts = [p.read_text().strip() for p in sorted(Path('shortcut-signing-v4/lzma').glob('part-*.txt'))]
-              if len(parts) != 2:
-                  raise ValueError(f'Expected 2 compressed chunks, got {len(parts)}')
-
-              compressed = base64.b64decode(''.join(parts), validate=True)
-              raw = lzma.decompress(compressed)
-              source_sha = hashlib.sha256(raw).hexdigest()
-              log += [
-                  f'chunks={len(parts)}',
-                  f'compressed_bytes={len(compressed)}',
-                  f'source_bytes={len(raw)}',
-                  f'source_sha256={source_sha}',
-              ]
-
-              expected_sha = 'bdbad92df890adf6e1a945d72d408a6ca159e8b457375a2fc3ac52bddb5645e6'
-              if source_sha != expected_sha:
-                  raise ValueError(f'Unexpected source SHA-256: {source_sha}')
-
-              shortcut = plistlib.loads(raw)
-              actions = shortcut.get('WFWorkflowActions', [])
-              questions = shortcut.get('WFWorkflowImportQuestions', [])
-              log += [f'actions={len(actions)}', f'import_questions={len(questions)}']
-              if len(actions) != 50:
-                  raise ValueError(f'Expected 50 actions, got {len(actions)}')
-              if len(questions) != 6:
-                  raise ValueError(f'Expected 6 import questions, got {len(questions)}')
-
-              # Reject the exact classes of defects found in V3/V3.1.
-              bad_ids = {'is.workflow.actions.geolocation.get'}
-              for i, a in enumerate(actions):
-                  ident = a.get('WFWorkflowActionIdentifier')
-                  params = a.get('WFWorkflowActionParameters', {})
-                  if ident in bad_ids:
-                      raise ValueError(f'Unsupported action identifier at {i}: {ident}')
-                  if ident == 'is.workflow.actions.conditional':
-                      mode = params.get('WFControlFlowMode')
-                      if mode in (0, 1) and 'WFCondition' in params:
-                          if not isinstance(params['WFCondition'], int):
-                              raise ValueError(f'Non-integer condition at {i}')
-                          if params['WFCondition'] in (4,5,8,9,99,999) and not params.get('WFConditionalActionString'):
-                              raise ValueError(f'Blank conditional comparison at {i}')
-                          if 'WFInput' not in params:
-                              raise ValueError(f'Missing conditional input at {i}')
-
-              if sum(1 for a in actions if a.get('WFWorkflowActionIdentifier') == 'com.apple.mobiletimer-framework.MobileTimerIntents.MTGetAlarmsIntent') != 1:
-                  raise ValueError('Expected exactly one filtered Get Alarms action')
-
-              xml = plistlib.dumps(shortcut, fmt=plistlib.FMT_XML, sort_keys=False).decode('utf-8')
-              payload = json.dumps({
-                  'shortcutName': 'منبّه الصلوات الذكي V4',
-                  'shortcut': xml,
-              }, ensure_ascii=False).encode('utf-8')
-              log.append(f'payload_bytes={len(payload)}')
-
-              req = urllib.request.Request(
-                  'https://hubsign.routinehub.services/sign',
-                  data=payload,
-                  headers={
-                      'Content-Type': 'application/json',
-                      'User-Agent': 'cherri/2.3.0',
-                      'Accept': '*/*',
-                  },
-                  method='POST',
-              )
-              with urllib.request.urlopen(req, timeout=90) as res:
-                  body = res.read()
-                  log += [
-                      f'status={res.status}',
-                      f'final_url={res.geturl()}',
-                      f'content_type={res.headers.get("Content-Type")}',
-                      f'response_bytes={len(body)}',
-                      f'prefix={body[:16]!r}',
-                  ]
-
-              Path('hubsign-response.bin').write_bytes(body)
-              if not body.startswith(b'AEA1'):
-                  raise ValueError('HubSign did not return an AEA1 signed shortcut')
-
-              Path('Prayer_Alarm_Smart_V4_Signed.shortcut').write_bytes(body)
-              log += [
-                  'signed=true',
-                  f'signed_sha256={hashlib.sha256(body).hexdigest()}',
-              ]
-
-          except urllib.error.HTTPError as e:
-              body = e.read()
-              Path('hubsign-response.bin').write_bytes(body)
-              log += [f'http_error={e.code}', f'url={e.geturl()}', f'body_prefix={body[:1000]!r}']
-              raise
-          except Exception as e:
-              log += [f'exception={type(e).__name__}: {e}', traceback.format_exc()]
-              raise
-          finally:
-              Path('sign-diagnostics.txt').write_text('\n'.join(log), encoding='utf-8')
-              print('\n'.join(log))
+          parts = [p.read_text().strip() for p in sorted(Path('shortcut-signing-v4/lzma').glob('part-*.txt'))]
+          raw = lzma.decompress(base64.b64decode(''.join(parts), validate=True))
+          s = plistlib.loads(raw)
+          print('ACTIONS', len(s.get('WFWorkflowActions', [])))
+          print('QUESTIONS', json.dumps(s.get('WFWorkflowImportQuestions', []), ensure_ascii=False, default=str))
+          for i,a in enumerate(s.get('WFWorkflowActions', [])):
+              ident=a.get('WFWorkflowActionIdentifier')
+              p=a.get('WFWorkflowActionParameters',{})
+              out={k:p.get(k) for k in ['WFControlFlowMode','GroupingIdentifier','WFCondition','WFConditionalActionString','WFNumberValue','WFDictionaryKey','WFVariableName','WFInputType','WFAskActionPrompt','WFAskActionDefaultAnswer','WFAdjustOperation','WFURLActionURL','WFNotificationActionTitle'] if k in p}
+              print(f'{i:02d} {ident} {json.dumps(out, ensure_ascii=False, default=str)}')
           PY
-
-      - name: Upload signed V4 and diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Prayer_Alarm_Smart_V4_Signed
-          path: |
-            Prayer_Alarm_Smart_V4_Signed.shortcut
-            sign-diagnostics.txt
-            hubsign-response.bin
-          if-no-files-found: warn
