@@ -1,0 +1,175 @@
+name: Temp Sign Prayer V5.0
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout V5.0 payload only
+        uses: actions/checkout@v4
+        with:
+          show-progress: false
+          sparse-checkout: |
+            shortcut-signing-v50
+          sparse-checkout-cone-mode: true
+
+      - name: Validate and sign Prayer V5.0 with HubSign
+        run: |
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import lzma
+          import plistlib
+          import traceback
+          import urllib.error
+          import urllib.request
+          from pathlib import Path
+
+          log = []
+          try:
+              payload_path = Path('shortcut-signing-v50/Prayer_Alarm_V50.xz.b64')
+              compressed = base64.b64decode(payload_path.read_text().strip(), validate=True)
+              raw = lzma.decompress(compressed)
+              shortcut = plistlib.loads(raw)
+              actions = shortcut.get('WFWorkflowActions', [])
+              questions = shortcut.get('WFWorkflowImportQuestions', [])
+
+              if shortcut.get('WFWorkflowName') != 'منبه الصلوات الذكي V5.0':
+                  raise ValueError('Unexpected workflow name')
+              if len(actions) != 35:
+                  raise ValueError(f'Expected 35 actions, found {len(actions)}')
+              if len(questions) != 5:
+                  raise ValueError(f'Expected 5 import questions, found {len(questions)}')
+
+              number_values = []
+              for index in range(1, 6):
+                  action = actions[index]
+                  if action.get('WFWorkflowActionIdentifier') != 'is.workflow.actions.number':
+                      raise ValueError(f'Action {index} is not a number action')
+                  number_values.append(action.get('WFWorkflowActionParameters', {}).get('WFNumberActionNumber'))
+
+              defaults = [str(q.get('DefaultAnswer')) for q in questions]
+              if number_values != [0, 0, 0, 0, 0]:
+                  raise ValueError(f'Prayer offsets are not all zero: {number_values}')
+              if defaults != ['0', '0', '0', '0', '0']:
+                  raise ValueError(f'Import defaults are not all zero: {defaults}')
+
+              ids = [a.get('WFWorkflowActionIdentifier') for a in actions]
+              create_id = 'com.apple.mobiletimer-framework.MobileTimerIntents.MTCreateAlarmIntent'
+              delete_id = 'com.apple.mobiletimer.DeleteAlarmIntent'
+              if ids.count(create_id) != 5:
+                  raise ValueError(f'Expected 5 create alarm actions, found {ids.count(create_id)}')
+              if ids.count(delete_id) != 1:
+                  raise ValueError(f'Expected 1 bulk delete action, found {ids.count(delete_id)}')
+
+              forbidden = {
+                  'is.workflow.actions.openurl',
+                  'is.workflow.actions.openurls',
+                  'is.workflow.actions.url',
+                  'is.workflow.actions.choosefrommenu',
+                  'com.apple.mobiletimer.UpdateAlarmIntent',
+              }
+              remaining = [identifier for identifier in ids if identifier in forbidden]
+              if remaining:
+                  raise ValueError(f'Forbidden interactive actions remain: {remaining}')
+
+              success_indexes = []
+              for i, action in enumerate(actions):
+                  if action.get('WFWorkflowActionIdentifier') == 'is.workflow.actions.notification':
+                      params = action.get('WFWorkflowActionParameters', {})
+                      if params.get('WFNotificationActionTitle') == 'تم تحديث تنبيهات الصلاة':
+                          success_indexes.append(i)
+                          if params.get('WFNotificationActionSound') is not False:
+                              raise ValueError('Success notification must be silent')
+
+              if success_indexes != [30]:
+                  raise ValueError(f'Expected one success notification at index 30, found {success_indexes}')
+
+              success_group = '44638808-801B-4349-9E47-2B0D7081D826'
+              else_index = next(
+                  i for i, action in enumerate(actions)
+                  if action.get('WFWorkflowActionIdentifier') == 'is.workflow.actions.conditional'
+                  and action.get('WFWorkflowActionParameters', {}).get('GroupingIdentifier') == success_group
+                  and action.get('WFWorkflowActionParameters', {}).get('WFControlFlowMode') == 1
+              )
+              if not success_indexes[0] < else_index:
+                  raise ValueError('Success notification is not inside the success branch')
+
+              serialized = plistlib.dumps(shortcut, fmt=plistlib.FMT_XML, sort_keys=False)
+              source_sha = hashlib.sha256(serialized).hexdigest()
+              Path('Prayer_Alarm_Smart_V5_0_Source.shortcut').write_bytes(serialized)
+
+              request_payload = json.dumps({
+                  'shortcutName': 'منبه الصلوات الذكي V5.0',
+                  'shortcut': serialized.decode('utf-8'),
+              }, ensure_ascii=False).encode('utf-8')
+
+              request = urllib.request.Request(
+                  'https://hubsign.routinehub.services/sign',
+                  data=request_payload,
+                  headers={
+                      'Content-Type': 'application/json',
+                      'User-Agent': 'cherri/2.3.0',
+                      'Accept': '*/*',
+                  },
+                  method='POST',
+              )
+
+              with urllib.request.urlopen(request, timeout=90) as response:
+                  body = response.read()
+                  log.extend([
+                      f'status={response.status}',
+                      f'source_sha256={source_sha}',
+                      f'actions={len(actions)}',
+                      f'import_questions={len(questions)}',
+                      f'number_values={number_values}',
+                      f'default_answers={defaults}',
+                      f'create_alarm_actions={ids.count(create_id)}',
+                      f'delete_alarm_actions={ids.count(delete_id)}',
+                      f'success_notification_index={success_indexes[0]}',
+                      f'success_notification_silent=true',
+                      f'response_bytes={len(body)}',
+                      f'prefix={body[:4]!r}',
+                  ])
+
+              Path('hubsign-response.bin').write_bytes(body)
+              if not body.startswith(b'AEA1'):
+                  raise ValueError('HubSign did not return an AEA1 signed shortcut')
+
+              Path('Prayer_Alarm_Smart_V5_0_Signed.shortcut').write_bytes(body)
+              log.extend([
+                  'signed=true',
+                  f'signed_sha256={hashlib.sha256(body).hexdigest()}',
+              ])
+
+          except urllib.error.HTTPError as error:
+              body = error.read()
+              Path('hubsign-response.bin').write_bytes(body)
+              log.extend([f'http_error={error.code}', f'body_prefix={body[:1000]!r}'])
+              raise
+          except Exception as error:
+              log.extend([f'exception={type(error).__name__}: {error}', traceback.format_exc()])
+              raise
+          finally:
+              Path('sign-diagnostics.txt').write_text('\n'.join(log), encoding='utf-8')
+              print('\n'.join(log))
+          PY
+
+      - name: Upload signed V5.0 and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Prayer_Alarm_Smart_V5_0_Signed
+          path: |
+            Prayer_Alarm_Smart_V5_0_Signed.shortcut
+            Prayer_Alarm_Smart_V5_0_Source.shortcut
+            sign-diagnostics.txt
+            hubsign-response.bin
+          if-no-files-found: warn
