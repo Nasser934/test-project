@@ -3,8 +3,6 @@ name: Temp Build Prayer V6
 on:
   push:
     branches: [temp-build-prayer-v60-20260711]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -15,6 +13,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Test current AlAdhan responses
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          curl -fsSL 'https://api.aladhan.com/v1/timings/11-07-2026?latitude=24.7136&longitude=46.6753&method=4&iso8601=true' -o build/api-ddmmyyyy.json
+          curl -fsSL 'https://api.aladhan.com/v1/timings/2026-07-11?latitude=24.7136&longitude=46.6753&method=4&iso8601=true' -o build/api-yyyymmdd.json
+          python3 - <<'PY' | tee build/api-analysis.txt
+          import json
+          for path in ['build/api-ddmmyyyy.json','build/api-yyyymmdd.json']:
+              d=json.load(open(path))
+              print(path, 'code=', d.get('code'), 'status=', d.get('status'), 'data_type=', type(d.get('data')).__name__, 'data=', str(d.get('data'))[:300])
+          PY
       - uses: actions/setup-go@v5
         with:
           go-version: '1.24.x'
@@ -28,7 +39,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p build
           CHERRI="$(go env GOPATH)/bin/cherri"
           "$CHERRI" shortcut-v60/test.cherri --skip-sign 2>&1 | tee build/test-compile.log
           "$CHERRI" shortcut-v60/prayer-settings-v60.cherri --skip-sign 2>&1 | tee build/settings-compile.log
