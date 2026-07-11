@@ -1,0 +1,307 @@
+#include 'actions/location'
+#include 'actions/documents'
+#include 'actions/calendar'
+#include 'actions/text'
+#include 'actions/web'
+
+#define name منبه الصلوات الذكي V6.0
+#define color green
+#define glyph apple
+#define version 26
+
+action 'addnewreminder' addTimedReminder(
+    text title: 'WFCalendarItemTitle',
+    text when: 'WFAlertCustomTime',
+    text ?notes: 'WFCalendarItemNotes'
+) {
+    "WFCalendarItemAlert": true,
+    "WFAlertTrigger": "At Time"
+}
+
+action 'filter.reminders' findPrayerReminders()
+
+comment('''🕌 منبه الصلوات الذكي V6.0
+
+يقرأ إعدادات المستخدم المحفوظة، ويجلب أوقات اليوم والغد من AlAdhan API، ثم ينشئ فقط التنبيهات المختارة.
+لا يعرض أي إعدادات أثناء التشغيل اليومي.
+لا يحذف منبهات أو تذكيرات المستخدم الشخصية.''')
+
+@settingsFile = getFile("PrayerAlarm/settings.txt", false)
+if !@settingsFile {
+    showNotification(
+        "شغّل اختصار «إعدادات منبه الصلوات الذكي V6.0» أولًا.",
+        "⚙️ الإعدادات غير موجودة",
+        true
+    )
+    stop()
+}
+
+@settingsText = getText(@settingsFile)
+@methodMatch = matchText('(?m)^method=([0-9]+)$', @settingsText)
+@method = getMatchGroup(@methodMatch, 1)
+if !@method { @method = 4 }
+
+@locationModeMatch = matchText('(?m)^location_mode=(.+)$', @settingsText)
+@locationMode = getMatchGroup(@locationModeMatch, 1)
+@latitude = ""
+@longitude = ""
+
+if @locationMode == "fixed" {
+    @latMatch = matchText('(?m)^fixed_latitude=(.+)$', @settingsText)
+    @lonMatch = matchText('(?m)^fixed_longitude=(.+)$', @settingsText)
+    @latitude = getMatchGroup(@latMatch, 1)
+    @longitude = getMatchGroup(@lonMatch, 1)
+} else {
+    @currentLocation = getCurrentLocation()
+    @latitude = getLocationDetail(@currentLocation, "Latitude")
+    @longitude = getLocationDetail(@currentLocation, "Longitude")
+}
+
+if !@latitude {
+    showNotification(
+        "تعذر تحديد الموقع. لم يتم حذف التنبيهات الحالية.",
+        "⚠️ فشل تحديث مواقيت الصلاة",
+        true
+    )
+    stop()
+}
+
+@now = currentDate()
+@todayText = formatDate(@now, "Custom", "dd-MM-yyyy")
+@tomorrow = adjustDate(@now, "Add", qty(1, "days"))
+@tomorrowText = formatDate(@tomorrow, "Custom", "dd-MM-yyyy")
+
+@todayURL = "https://api.aladhan.com/v1/timings/{@todayText}?latitude={@latitude}&longitude={@longitude}&method={@method}&iso8601=true"
+@tomorrowURL = "https://api.aladhan.com/v1/timings/{@tomorrowText}?latitude={@latitude}&longitude={@longitude}&method={@method}&iso8601=true"
+
+@apiResponse = downloadURL(@todayURL)
+@apiData = getDictionary(@apiResponse)
+@fajrCheck = getValue(@apiData, "data.timings.Fajr")
+@usedCache = false
+
+if !@fajrCheck {
+    @cacheFile = getFile("PrayerAlarm/cache_tomorrow.json", false)
+    if @cacheFile {
+        @cacheText = getText(@cacheFile)
+        @cacheData = getDictionary(@cacheText)
+        @cacheDate = getValue(@cacheData, "data.date.gregorian.date")
+        @cacheFajr = getValue(@cacheData, "data.timings.Fajr")
+        if @cacheDate == @todayText && @cacheFajr {
+            @apiData = @cacheData
+            @fajrCheck = @cacheFajr
+            @usedCache = true
+        }
+    }
+}
+
+if !@fajrCheck {
+    @stateFile = getFile("PrayerAlarm/state.txt", false)
+    @stateText = ""
+    if @stateFile { @stateText = getText(@stateFile) }
+    @failureCount = 1
+    if @stateText contains "failures=1" { @failureCount = 2 }
+    if @stateText contains "failures=2" { @failureCount = 2 }
+    saveFile("PrayerAlarm/state.txt", "failures={@failureCount}\nlast_failure={@todayText}", true)
+    if @failureCount >= 2 {
+        showNotification(
+            "لم يتم تحديث مواقيت الصلاة ليومين متتاليين. افتح الاختصار وتحقق من الإنترنت والموقع.",
+            "⚠️ تنبيه مهم: فشل التحديث",
+            true
+        )
+    } else {
+        showNotification(
+            "تعذر جلب المواقيت اليوم. لم يتم حذف التنبيهات الحالية.",
+            "⚠️ فشل تحديث مواقيت الصلاة",
+            true
+        )
+    }
+    stop()
+}
+
+if !@usedCache {
+    @todayCacheText = getText(@apiResponse)
+    saveFile("PrayerAlarm/cache_today.json", @todayCacheText, true)
+
+    @tomorrowResponse = downloadURL(@tomorrowURL)
+    @tomorrowData = getDictionary(@tomorrowResponse)
+    @tomorrowFajr = getValue(@tomorrowData, "data.timings.Fajr")
+    if @tomorrowFajr {
+        @tomorrowCacheText = getText(@tomorrowResponse)
+        saveFile("PrayerAlarm/cache_tomorrow.json", @tomorrowCacheText, true)
+    }
+}
+
+@weekday = getValue(@apiData, "data.date.gregorian.weekday.en")
+@hijriMonth = getValue(@apiData, "data.date.hijri.month.number")
+@isFriday = false
+if @weekday == "Friday" { @isFriday = true }
+@isRamadan = false
+if @hijriMonth == 9 { @isRamadan = true }
+
+@oldAlarms = getAlarms()
+if @oldAlarms { deleteAlarm(@oldAlarms) }
+
+@oldReminders = findPrayerReminders()
+if @oldReminders { removeReminders(@oldReminders) }
+
+@created = []
+@settingsLines = splitText(@settingsText, "\n")
+
+for line in @settingsLines {
+    if @line contains "|" {
+        @parts = splitText(@line, "|")
+        @key = getListItem(@parts, 1)
+        @mode = getListItem(@parts, 2)
+        @offset = getListItem(@parts, 3)
+        @enabled = true
+        @baseTime = ""
+        @title = ""
+        @notes = ""
+
+        if @key == "fajr" {
+            @baseTime = getValue(@apiData, "data.timings.Fajr")
+            @title = "🕌 ذكي | صلاة الفجر"
+            @notes = "حان وقت صلاة الفجر"
+        }
+
+        if @key == "dhuhr" {
+            @baseTime = getValue(@apiData, "data.timings.Dhuhr")
+            @title = "🕌 ذكي | صلاة الظهر"
+            @notes = "حان وقت صلاة الظهر"
+            if @isFriday == true {
+                @title = "🕌 ذكي | صلاة الجمعة"
+                @notes = "استعد لصلاة الجمعة"
+                @offset = getListItem(@parts, 4)
+            }
+        }
+
+        if @key == "asr" {
+            @baseTime = getValue(@apiData, "data.timings.Asr")
+            @title = "🕌 ذكي | صلاة العصر"
+            @notes = "حان وقت صلاة العصر"
+        }
+
+        if @key == "maghrib" {
+            @baseTime = getValue(@apiData, "data.timings.Maghrib")
+            @title = "🕌 ذكي | صلاة المغرب"
+            @notes = "حان وقت صلاة المغرب"
+        }
+
+        if @key == "isha" {
+            @baseTime = getValue(@apiData, "data.timings.Isha")
+            @title = "🕌 ذكي | صلاة العشاء"
+            @notes = "حان وقت صلاة العشاء"
+        }
+
+        if @key == "sunrise_warning" {
+            @baseTime = getValue(@apiData, "data.timings.Sunrise")
+            @title = "🕌 ذكي | قرب الشروق"
+            @notes = "اقترب شروق الشمس — لا تنسَ أذكار الصباح"
+        }
+
+        if @key == "evening_adhkar" {
+            @baseTime = getValue(@apiData, "data.timings.Sunset")
+            @title = "🕌 ذكي | أذكار المساء"
+            @notes = "اقترب غروب الشمس — لا تنسَ أذكار المساء"
+        }
+
+        if @key == "qiyam" {
+            @qiyamSource = getListItem(@parts, 4)
+            if @qiyamSource == "lastthird" {
+                @baseTime = getValue(@apiData, "data.timings.Lastthird")
+            } else {
+                @baseTime = getValue(@apiData, "data.timings.Fajr")
+            }
+            @title = "🕌 ذكي | قيام الليل"
+            @notes = "وقت قيام الليل"
+        }
+
+        if @key == "duha" {
+            @baseTime = getValue(@apiData, "data.timings.Sunrise")
+            @title = "🕌 ذكي | صلاة الضحى"
+            @notes = "حان وقت صلاة الضحى"
+        }
+
+        if @key == "witr" {
+            @baseTime = getValue(@apiData, "data.timings.Fajr")
+            @title = "🕌 ذكي | صلاة الوتر"
+            @notes = "لا تنسَ صلاة الوتر"
+        }
+
+        if @key == "friday_reminder" {
+            if @isFriday == true {
+                @baseTime = getValue(@apiData, "data.timings.Dhuhr")
+                @title = "🕌 ذكي | تذكير الجمعة"
+                @notes = "جمعة مباركة — لا تنسَ سورة الكهف والصلاة على النبي ﷺ"
+            } else {
+                @enabled = false
+            }
+        }
+
+        if @key == "suhoor" {
+            if @isRamadan == true {
+                @baseTime = getValue(@apiData, "data.timings.Fajr")
+                @title = "🕌 ذكي | تذكير السحور"
+                @notes = "وقت السحور — تسحروا فإن في السحور بركة"
+            } else {
+                @enabled = false
+            }
+        }
+
+        if @key == "imsak" {
+            if @isRamadan == true {
+                @baseTime = getValue(@apiData, "data.timings.Imsak")
+                @title = "🕌 ذكي | تذكير الإمساك"
+                @notes = "اقترب وقت الفجر"
+            } else {
+                @enabled = false
+            }
+        }
+
+        if @key == "iftar" {
+            if @isRamadan == true {
+                @baseTime = getValue(@apiData, "data.timings.Maghrib")
+                @title = "🕌 ذكي | موعد الإفطار"
+                @notes = "حان موعد الإفطار"
+            } else {
+                @enabled = false
+            }
+        }
+
+        if @enabled == true && @baseTime {
+            @targetTime = date(@baseTime)
+            @targetTime = adjustDate(@targetTime, "Add", qty(@offset, "min"))
+
+            if @targetTime > @now {
+                if @mode == "alarm_notification" {
+                    createAlarm(@title, @targetTime, true)
+                }
+                if @mode == "alarm_notification" || @mode == "notification" {
+                    addTimedReminder(@title, @targetTime, @notes)
+                }
+                @created += @title
+            }
+        }
+    }
+}
+
+@createdCount = count(@created)
+@successMatch = matchText('(?m)^success_notification=([01])$', @settingsText)
+@successEnabled = getMatchGroup(@successMatch, 1)
+
+@statusNote = ""
+if @usedCache == true { @statusNote = "\nتم استخدام النسخة الاحتياطية المحفوظة." }
+
+if @successEnabled == 1 {
+    showNotification(
+        "تم تحديث {@createdCount} عنصرًا حسب إعداداتك.{@statusNote}",
+        "✅ تم تحديث تنبيهات الصلاة",
+        false
+    )
+}
+
+saveFile(
+    "PrayerAlarm/state.txt",
+    "failures=0\nlast_success={@todayText}\ncreated={@createdCount}\nused_cache={@usedCache}",
+    true
+)
