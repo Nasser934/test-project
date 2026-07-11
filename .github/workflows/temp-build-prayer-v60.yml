@@ -3,6 +3,8 @@ name: Temp Build Prayer V6
 on:
   push:
     branches: [temp-build-prayer-v60-20260711]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
