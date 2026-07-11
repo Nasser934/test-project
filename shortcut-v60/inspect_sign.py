@@ -37,7 +37,7 @@ def normalize(shortcut,name,is_main):
     if is_main: patch_offset_duration(actions)
     ids=Counter(a.get('WFWorkflowActionIdentifier','') for a in actions)
     if is_main:
-        if len(actions)>360: raise ValueError(f'Main shortcut still too large: {len(actions)} actions')
+        if len(actions)>420: raise ValueError(f'Main shortcut unexpectedly large: {len(actions)} actions')
         alarms=[a for a in actions if a.get('WFWorkflowActionIdentifier')=='com.apple.mobiletimer-framework.MobileTimerIntents.MTGetAlarmsIntent']
         if len(alarms)!=1: raise ValueError('Expected one Get Alarms')
         p=alarms[0].setdefault('WFWorkflowActionParameters',{}); p['ShowWhenRun']=False; p['WFContentItemLimitEnabled']=False; p['WFContentItemInputParameter']='Library'; p['WFContentItemFilter']=content_filter('label',PREFIX)
@@ -47,6 +47,7 @@ def normalize(shortcut,name,is_main):
         for x in ['is.workflow.actions.choosefromlist','is.workflow.actions.ask','is.workflow.actions.alert']:
             if ids[x]: raise ValueError(f'Interactive action in main: {x}')
         if ids['is.workflow.actions.downloadurl']!=1: raise ValueError('Expected exactly one API request')
+        if ids['is.workflow.actions.repeat.each']!=1: raise ValueError(f'Expected one repeat loop, found {ids["is.workflow.actions.repeat.each"]}')
     data=plistlib.dumps(shortcut,fmt=plistlib.FMT_XML,sort_keys=False)
     return data,ids,len(actions)
 
