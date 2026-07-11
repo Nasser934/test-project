@@ -4,6 +4,7 @@ import hashlib
 import json
 import plistlib
 import traceback
+import uuid
 import urllib.error
 import urllib.request
 from collections import Counter
@@ -48,9 +49,106 @@ def load(path: Path) -> dict:
     return plistlib.loads(path.read_bytes())
 
 
+def patch_main_durations(actions: list[dict]) -> dict[str, int]:
+    """Repair Cherri's missing qty() helper actions.
+
+    Cherri compiled qty(...) references without emitting the referenced action.
+    Patch Adjust Date to use native WFQuantityFieldValue inputs directly.
+    """
+    stats = {'one_day': 0, 'offset_minutes': 0, 'removed_broken_qty_vars': 0}
+
+    one_day_uuid = str(uuid.uuid4()).upper()
+    for index, action in enumerate(actions):
+        params = action.get('WFWorkflowActionParameters', {})
+        if (
+            action.get('WFWorkflowActionIdentifier') == 'is.workflow.actions.setvariable'
+            and params.get('WFVariableName') == 'oneDay'
+        ):
+            actions[index] = {
+                'WFWorkflowActionIdentifier': 'is.workflow.actions.number',
+                'WFWorkflowActionParameters': {
+                    'UUID': one_day_uuid,
+                    'WFNumberActionNumber': 1,
+                },
+            }
+            break
+    else:
+        raise ValueError('Could not find the broken oneDay variable action')
+
+    number_actions = [
+        a for a in actions
+        if a.get('WFWorkflowActionIdentifier') == 'is.workflow.actions.detect.number'
+    ]
+    if len(number_actions) != 1:
+        raise ValueError(f'Expected one Get Numbers action for offsets, found {len(number_actions)}')
+    offset_number_params = number_actions[0].get('WFWorkflowActionParameters', {})
+    offset_number_uuid = offset_number_params.get('UUID')
+    offset_number_name = offset_number_params.get('CustomOutputName', 'GetNumbers')
+    if not offset_number_uuid:
+        raise ValueError('Offset Get Numbers action is missing UUID')
+
+    for index, action in enumerate(actions):
+        params = action.get('WFWorkflowActionParameters', {})
+        if (
+            action.get('WFWorkflowActionIdentifier') == 'is.workflow.actions.setvariable'
+            and params.get('WFVariableName') == 'offsetDuration'
+        ):
+            actions[index] = {'WFWorkflowActionIdentifier': 'is.workflow.actions.nothing'}
+            stats['removed_broken_qty_vars'] += 1
+
+    for action in actions:
+        if action.get('WFWorkflowActionIdentifier') != 'is.workflow.actions.adjustdate':
+            continue
+        params = action.setdefault('WFWorkflowActionParameters', {})
+        date_repr = repr(params.get('WFDate', {}))
+
+        if "'VariableName': 'now'" in date_repr:
+            params['WFDuration'] = {
+                'Value': {
+                    'Unit': 'days',
+                    'Magnitude': {
+                        'OutputUUID': one_day_uuid,
+                        'Type': 'ActionOutput',
+                        'OutputName': 'Number',
+                    },
+                },
+                'WFSerializationType': 'WFQuantityFieldValue',
+            }
+            stats['one_day'] += 1
+        elif "'VariableName': 'targetTime'" in date_repr:
+            params['WFDuration'] = {
+                'Value': {
+                    'Unit': 'min',
+                    'Magnitude': {
+                        'OutputUUID': offset_number_uuid,
+                        'Type': 'ActionOutput',
+                        'OutputName': offset_number_name,
+                    },
+                },
+                'WFSerializationType': 'WFQuantityFieldValue',
+            }
+            stats['offset_minutes'] += 1
+
+    if stats['one_day'] != 1:
+        raise ValueError(f'Expected one tomorrow Adjust Date patch, got {stats["one_day"]}')
+    if stats['offset_minutes'] != 1:
+        raise ValueError(f'Expected one offset Adjust Date patch, got {stats["offset_minutes"]}')
+
+    for action in actions:
+        if action.get('WFWorkflowActionIdentifier') != 'is.workflow.actions.adjustdate':
+            continue
+        duration_repr = repr(action.get('WFWorkflowActionParameters', {}).get('WFDuration', {}))
+        if 'oneDay' in duration_repr or 'offsetDuration' in duration_repr:
+            raise ValueError(f'Broken duration variable remains: {duration_repr}')
+
+    return stats
+
+
 def normalize_and_patch(shortcut: dict, name: str, is_main: bool) -> tuple[bytes, Counter]:
     shortcut['WFWorkflowName'] = name
     actions = shortcut.get('WFWorkflowActions', [])
+    if is_main:
+        patch_main_durations(actions)
     ids = Counter(a.get('WFWorkflowActionIdentifier', '') for a in actions)
 
     if is_main:
