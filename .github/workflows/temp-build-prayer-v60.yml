@@ -20,6 +20,58 @@ jobs:
           go-version: '1.24.x'
       - name: Install Cherri
         run: go install github.com/electrikmilk/cherri@68f3f3feaf00768f7943f650b2230605355936ed
+      - name: Preprocess V6 Cherri sources
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('shortcut-v60/prayer-settings-v60.cherri')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('@lines = []', '@modeOptions = list("إشعار فقط", "منبه الساعة + إشعار")\n@lines = []')
+          s = s.replace('chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"),', 'chooseFromList(@modeOptions,')
+          s = s.replace('''@methodName = chooseFromList(
+              list("أم القرى — مناسب للمملكة", "رابطة العالم الإسلامي", "الهيئة المصرية", "جامعة كراتشي"),
+              "اختر طريقة حساب مواقيت الصلاة"
+          )'''.replace('          ', ''), '''@methodOptions = list("أم القرى — مناسب للمملكة", "رابطة العالم الإسلامي", "الهيئة المصرية", "جامعة كراتشي")
+          @methodName = chooseFromList(
+              @methodOptions,
+              "اختر طريقة حساب مواقيت الصلاة"
+          )'''.replace('          ', ''))
+          s = s.replace('''@locationChoice = chooseFromList(
+              list("موقعي الحالي يوميًا — مناسب للسفر", "مدينة ثابتة"),
+              "كيف تريد تحديد الموقع؟"
+          )'''.replace('          ', ''), '''@locationOptions = list("موقعي الحالي يوميًا — مناسب للسفر", "مدينة ثابتة")
+          @locationChoice = chooseFromList(
+              @locationOptions,
+              "كيف تريد تحديد الموقع؟"
+          )'''.replace('          ', ''))
+          s = s.replace('''@successChoice = chooseFromList(
+              list("تشغيل إشعار نجاح التحديث", "إيقاف إشعار النجاح"),
+              "هل تريد إشعارًا بعد نجاح التحديث اليومي؟"
+          )'''.replace('          ', ''), '''@successOptions = list("تشغيل إشعار نجاح التحديث", "إيقاف إشعار النجاح")
+          @successChoice = chooseFromList(
+              @successOptions,
+              "هل تريد إشعارًا بعد نجاح التحديث اليومي؟"
+          )'''.replace('          ', ''))
+          s = s.replace('''    @qiyamChoice = chooseFromList(
+                  list("قبل الفجر — الافتراضي نصف ساعة", "بداية الثلث الأخير من الليل من API"),
+                  "اختر طريقة وقت قيام الليل"
+              )'''.replace('          ', ''), '''    @qiyamOptions = list("قبل الفجر — الافتراضي نصف ساعة", "بداية الثلث الأخير من الليل من API")
+              @qiyamChoice = chooseFromList(
+                  @qiyamOptions,
+                  "اختر طريقة وقت قيام الليل"
+              )'''.replace('          ', ''))
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('shortcut-v60/prayer-main-v60.cherri')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('@tomorrow = adjustDate(@now, "Add", qty(1, "days"))', '@oneDay = qty(1, "days")\n@tomorrow = adjustDate(@now, "Add", @oneDay)')
+          s = s.replace('@targetTime = adjustDate(@targetTime, "Add", qty(@offset, "min"))', '@offsetDuration = qty(@offset, "min")\n            @targetTime = adjustDate(@targetTime, "Add", @offsetDuration)')
+          p.write_text(s, encoding='utf-8')
+
+          assert 'chooseFromList(list(' not in Path('shortcut-v60/prayer-settings-v60.cherri').read_text(encoding='utf-8')
+          assert 'adjustDate(@now, "Add", qty' not in Path('shortcut-v60/prayer-main-v60.cherri').read_text(encoding='utf-8')
+          PY
       - name: Compile complete V6 shortcuts
         shell: bash
         run: |
