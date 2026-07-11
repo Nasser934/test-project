@@ -11,7 +11,7 @@ enum AppGroup {
 }
 
 extension ManagedSettingsStore.Name {
-    static let sukun = Self("sukun")
+    static var sukun: Self { Self("sukun") }
 }
 
 struct AppGroupStore {
