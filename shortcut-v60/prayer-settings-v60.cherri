@@ -2,9 +2,8 @@
 #include 'actions/documents'
 #include 'actions/calendar'
 #include 'actions/text'
-#include 'actions/shortcuts'
 
-#define name إعدادات منبه الصلوات الذكي V6.0
+#define name إعدادات منبه الصلوات الذكي V6.1
 #define color green
 #define glyph apple
 #define version 26
@@ -86,17 +85,17 @@ if @locationChoice == "مدينة ثابتة" {
 @successNotification = 1
 if @successChoice == "إيقاف إشعار النجاح" { @successNotification = 0 }
 
-@qiyamSource = "fajr"
+@qiyamSource = "Fajr"
 if @selected contains "قيام الليل" {
     @qiyamChoice = chooseFromList(
         list("قبل الفجر — الافتراضي نصف ساعة", "بداية الثلث الأخير من الليل من API"),
         "اختر طريقة وقت قيام الليل"
     )
-    if @qiyamChoice == "بداية الثلث الأخير من الليل من API" { @qiyamSource = "lastthird" }
+    if @qiyamChoice == "بداية الثلث الأخير من الليل من API" { @qiyamSource = "Lastthird" }
 }
 
 @lines = []
-@lines += "version=6"
+@lines += "version=6.1"
 @lines += "method={@method}"
 @lines += "method_name={@methodName}"
 @lines += "location_mode={@locationMode}"
@@ -104,14 +103,13 @@ if @selected contains "قيام الليل" {
 @lines += "fixed_latitude={@fixedLatitude}"
 @lines += "fixed_longitude={@fixedLongitude}"
 @lines += "success_notification={@successNotification}"
-@lines += "qiyam_source={@qiyamSource}"
 
 if @selected contains "صلاة الفجر" {
     @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تنبيه صلاة الفجر")
     @mode = "notification"
     if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
     @offset = askValue("فرق الدقائق لصلاة الفجر. 0 = وقت الأذان، والسالب قبل الوقت.", "Number", "0")
-    @lines += "fajr|{@mode}|{@offset}"
+    @lines += "fajr§Fajr§{@mode}§{@offset}§🕌 ذكي | صلاة الفجر§حان وقت صلاة الفجر§always"
 }
 
 if @selected contains "الظهر / صلاة الجمعة" {
@@ -120,7 +118,8 @@ if @selected contains "الظهر / صلاة الجمعة" {
     if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
     @offset = askValue("فرق الدقائق لصلاة الظهر في الأيام العادية.", "Number", "0")
     @fridayOffset = askValue("فرق الدقائق لصلاة الجمعة يوم الجمعة. الافتراضي قبل الأذان بساعة.", "Number", "-60")
-    @lines += "dhuhr|{@mode}|{@offset}|{@fridayOffset}"
+    @lines += "dhuhr§Dhuhr§{@mode}§{@offset}§🕌 ذكي | صلاة الظهر§حان وقت صلاة الظهر§not_friday"
+    @lines += "jumuah§Dhuhr§{@mode}§{@fridayOffset}§🕌 ذكي | صلاة الجمعة§استعد لصلاة الجمعة§friday"
 }
 
 if @selected contains "صلاة العصر" {
@@ -128,7 +127,7 @@ if @selected contains "صلاة العصر" {
     @mode = "notification"
     if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
     @offset = askValue("فرق الدقائق لصلاة العصر.", "Number", "0")
-    @lines += "asr|{@mode}|{@offset}"
+    @lines += "asr§Asr§{@mode}§{@offset}§🕌 ذكي | صلاة العصر§حان وقت صلاة العصر§always"
 }
 
 if @selected contains "صلاة المغرب" {
@@ -136,7 +135,7 @@ if @selected contains "صلاة المغرب" {
     @mode = "notification"
     if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
     @offset = askValue("فرق الدقائق لصلاة المغرب.", "Number", "0")
-    @lines += "maghrib|{@mode}|{@offset}"
+    @lines += "maghrib§Maghrib§{@mode}§{@offset}§🕌 ذكي | صلاة المغرب§حان وقت صلاة المغرب§always"
 }
 
 if @selected contains "صلاة العشاء" {
@@ -144,7 +143,7 @@ if @selected contains "صلاة العشاء" {
     @mode = "notification"
     if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
     @offset = askValue("فرق الدقائق لصلاة العشاء.", "Number", "0")
-    @lines += "isha|{@mode}|{@offset}"
+    @lines += "isha§Isha§{@mode}§{@offset}§🕌 ذكي | صلاة العشاء§حان وقت صلاة العشاء§always"
 }
 
 if @selected contains "قرب الشروق — لا تنسَ أذكار الصباح" {
@@ -152,7 +151,7 @@ if @selected contains "قرب الشروق — لا تنسَ أذكار الصب
     @mode = "notification"
     if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
     @offset = askValue("فرق الدقائق عن الشروق. الافتراضي قبل الشروق بـ20 دقيقة.", "Number", "-20")
-    @lines += "sunrise_warning|{@mode}|{@offset}"
+    @lines += "sunrise§Sunrise§{@mode}§{@offset}§🕌 ذكي | قرب الشروق§اقترب شروق الشمس — لا تنسَ أذكار الصباح§always"
 }
 
 if @selected contains "أذكار المساء قبل الغروب" {
@@ -160,7 +159,7 @@ if @selected contains "أذكار المساء قبل الغروب" {
     @mode = "notification"
     if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
     @offset = askValue("فرق الدقائق عن غروب الشمس. الافتراضي قبل الغروب بـ20 دقيقة.", "Number", "-20")
-    @lines += "evening_adhkar|{@mode}|{@offset}"
+    @lines += "evening§Sunset§{@mode}§{@offset}§🕌 ذكي | أذكار المساء§اقترب غروب الشمس — لا تنسَ أذكار المساء§always"
 }
 
 if @selected contains "قيام الليل" {
@@ -168,9 +167,9 @@ if @selected contains "قيام الليل" {
     @mode = "notification"
     if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
     @defaultQiyam = "-30"
-    if @qiyamSource == "lastthird" { @defaultQiyam = "0" }
-    @offset = askValue("فرق الدقائق لقيام الليل. عند اختيار قبل الفجر، الافتراضي -30.", "Number", @defaultQiyam)
-    @lines += "qiyam|{@mode}|{@offset}|{@qiyamSource}"
+    if @qiyamSource == "Lastthird" { @defaultQiyam = "0" }
+    @offset = askValue("فرق الدقائق لقيام الليل.", "Number", @defaultQiyam)
+    @lines += "qiyam§{@qiyamSource}§{@mode}§{@offset}§🕌 ذكي | قيام الليل§وقت قيام الليل§always"
 }
 
 if @selected contains "صلاة الضحى" {
@@ -178,7 +177,7 @@ if @selected contains "صلاة الضحى" {
     @mode = "notification"
     if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
     @offset = askValue("فرق الدقائق بعد الشروق لصلاة الضحى. الافتراضي +20.", "Number", "20")
-    @lines += "duha|{@mode}|{@offset}"
+    @lines += "duha§Sunrise§{@mode}§{@offset}§🕌 ذكي | صلاة الضحى§حان وقت صلاة الضحى§always"
 }
 
 if @selected contains "صلاة الوتر" {
@@ -186,7 +185,7 @@ if @selected contains "صلاة الوتر" {
     @mode = "notification"
     if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
     @offset = askValue("فرق الدقائق عن أذان الفجر للوتر. الافتراضي قبل الفجر بـ45 دقيقة.", "Number", "-45")
-    @lines += "witr|{@mode}|{@offset}"
+    @lines += "witr§Fajr§{@mode}§{@offset}§🕌 ذكي | صلاة الوتر§لا تنسَ صلاة الوتر§always"
 }
 
 if @selected contains "تذكير الجمعة" {
@@ -194,7 +193,7 @@ if @selected contains "تذكير الجمعة" {
     @mode = "notification"
     if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
     @offset = askValue("فرق الدقائق عن وقت الظهر يوم الجمعة. الافتراضي قبل 3 ساعات.", "Number", "-180")
-    @lines += "friday_reminder|{@mode}|{@offset}"
+    @lines += "friday_reminder§Dhuhr§{@mode}§{@offset}§🕌 ذكي | تذكير الجمعة§جمعة مباركة — لا تنسَ سورة الكهف والصلاة على النبي ﷺ§friday"
 }
 
 if @selected contains "تذكير السحور في رمضان" {
@@ -202,7 +201,7 @@ if @selected contains "تذكير السحور في رمضان" {
     @mode = "notification"
     if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
     @offset = askValue("فرق الدقائق عن الفجر. الافتراضي قبل الفجر بساعة.", "Number", "-60")
-    @lines += "suhoor|{@mode}|{@offset}"
+    @lines += "suhoor§Fajr§{@mode}§{@offset}§🕌 ذكي | تذكير السحور§وقت السحور — تسحروا فإن في السحور بركة§ramadan"
 }
 
 if @selected contains "تذكير الإمساك في رمضان" {
@@ -210,7 +209,7 @@ if @selected contains "تذكير الإمساك في رمضان" {
     @mode = "notification"
     if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
     @offset = askValue("فرق الدقائق عن وقت الإمساك.", "Number", "0")
-    @lines += "imsak|{@mode}|{@offset}"
+    @lines += "imsak§Imsak§{@mode}§{@offset}§🕌 ذكي | تذكير الإمساك§اقترب وقت الفجر§ramadan"
 }
 
 if @selected contains "تذكير الإفطار في رمضان" {
@@ -218,14 +217,14 @@ if @selected contains "تذكير الإفطار في رمضان" {
     @mode = "notification"
     if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
     @offset = askValue("فرق الدقائق عن المغرب.", "Number", "0")
-    @lines += "iftar|{@mode}|{@offset}"
+    @lines += "iftar§Maghrib§{@mode}§{@offset}§🕌 ذكي | موعد الإفطار§حان موعد الإفطار§ramadan"
 }
 
 @configText = joinText(@lines, "\n")
 createFolder("PrayerAlarm")
 saveFile("PrayerAlarm/settings.txt", @configText, true)
 showNotification(
-    "تم حفظ اختياراتك. شغّل منبه الصلوات الذكي V6.0 الآن لتحديث التنبيهات، ثم اربطه بالأتمتة اليومية.",
+    "تم حفظ إعدادات V6.1. شغّل منبه الصلوات الذكي V6.1 الآن للتجربة.",
     "✅ تم حفظ إعدادات منبه الصلوات",
     false
 )
