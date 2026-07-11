@@ -47,7 +47,8 @@ def normalize(shortcut,name,is_main):
         for x in ['is.workflow.actions.choosefromlist','is.workflow.actions.ask','is.workflow.actions.alert']:
             if ids[x]: raise ValueError(f'Interactive action in main: {x}')
         if ids['is.workflow.actions.downloadurl']!=1: raise ValueError('Expected exactly one API request')
-        if ids['is.workflow.actions.repeat.each']!=1: raise ValueError(f'Expected one repeat loop, found {ids["is.workflow.actions.repeat.each"]}')
+        # Shortcuts serializes one Repeat block as two repeat.each actions: start and end.
+        if ids['is.workflow.actions.repeat.each']!=2: raise ValueError(f'Expected one repeat block, found {ids["is.workflow.actions.repeat.each"]} markers')
     data=plistlib.dumps(shortcut,fmt=plistlib.FMT_XML,sort_keys=False)
     return data,ids,len(actions)
 
@@ -65,7 +66,7 @@ try:
     MAIN_SOURCE.write_bytes(ms); SETTINGS_SOURCE.write_bytes(ss)
     msign=sign(ms,'منبه الصلوات الذكي V6.1'); ssign=sign(ss,'إعدادات منبه الصلوات الذكي V6.1')
     MAIN_SIGNED.write_bytes(msign); SETTINGS_SIGNED.write_bytes(ssign)
-    log += ['signed=true',f'main_actions={ma}',f'settings_actions={sa}',f'main_signed_bytes={len(msign)}',f'settings_signed_bytes={len(ssign)}',f'main_sha256={hashlib.sha256(msign).hexdigest()}',f'settings_sha256={hashlib.sha256(ssign).hexdigest()}',f'main_prefix={msign[:4]!r}',f'settings_prefix={ssign[:4]!r}',f'api_requests={mi["is.workflow.actions.downloadurl"]}',f'repeat_loops={mi["is.workflow.actions.repeat.each"]}']
+    log += ['signed=true',f'main_actions={ma}',f'settings_actions={sa}',f'main_signed_bytes={len(msign)}',f'settings_signed_bytes={len(ssign)}',f'main_sha256={hashlib.sha256(msign).hexdigest()}',f'settings_sha256={hashlib.sha256(ssign).hexdigest()}',f'main_prefix={msign[:4]!r}',f'settings_prefix={ssign[:4]!r}',f'api_requests={mi["is.workflow.actions.downloadurl"]}',f'repeat_markers={mi["is.workflow.actions.repeat.each"]}', 'repeat_blocks=1']
 except Exception as e:
     log.append(f'exception={type(e).__name__}: {e}'); log.append(traceback.format_exc()); raise
 finally:
