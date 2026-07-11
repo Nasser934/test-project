@@ -67,9 +67,11 @@ jobs:
           alarm_index=next(i for i,a in enumerate(actions) if a.get('WFWorkflowActionIdentifier')=='com.apple.mobiletimer-framework.MobileTimerIntents.MTGetAlarmsIntent')
           repeat_index=next(i for i,a in enumerate(actions) if a.get('WFWorkflowActionIdentifier')=='is.workflow.actions.repeat.each' and a.get('WFWorkflowActionParameters',{}).get('WFControlFlowMode')==0)
           assert alarm_index > repeat_index, (alarm_index, repeat_index)
-          assert any(a.get('WFWorkflowActionIdentifier')=='is.workflow.actions.notification' for a in actions)
+          notifications=[a for a in actions if a.get('WFWorkflowActionIdentifier')=='is.workflow.actions.notification']
+          assert len(notifications) >= 4, len(notifications)
           print('duration_patch_ok=true')
           print('cleanup_inside_loop=true')
+          print('notifications=', len(notifications))
           PY
           file build/*.shortcut | tee build/signed-file-types.txt
           ls -lah build | tee build/listing-after-sign.txt
