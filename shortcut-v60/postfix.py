@@ -1,5 +1,25 @@
 from pathlib import Path
 
+# Settings shortcut: make the user choose intentionally instead of preselecting all 14 items.
+p = Path('shortcut-v60/prayer-settings-v60.cherri')
+s = p.read_text(encoding='utf-8')
+s = s.replace(
+    '''@selected = chooseFromList(
+    @eventNames,
+    "اختر الصلوات والأوقات التي تريدها. يمكنك اختيار أي عدد.",
+    true,
+    true
+)''',
+    '''@selected = chooseFromList(
+    @eventNames,
+    "اختر الصلوات والأوقات التي تريدها. يمكنك اختيار أي عدد.",
+    true,
+    false
+)'''
+)
+p.write_text(s, encoding='utf-8')
+
+# Main shortcut fixes.
 p = Path('shortcut-v60/prayer-main-v60.cherri')
 s = p.read_text(encoding='utf-8')
 s = s.replace(
