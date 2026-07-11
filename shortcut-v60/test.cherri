@@ -1,0 +1,40 @@
+#include 'actions/location'
+#include 'actions/documents'
+#include 'actions/calendar'
+#include 'actions/text'
+#include 'actions/web'
+
+#define name Prayer V6 Smoke Test
+#define color green
+#define glyph mosque
+#define version 26
+
+enum askKind {
+    'Text',
+    'Number'
+}
+
+action default 'ask' askValue(
+    text promptText: 'WFAskActionPrompt',
+    askKind ?kind: 'WFInputType' = "Text",
+    text ?defaultValue: 'WFAskActionDefaultAnswer'
+)
+
+action 'addnewreminder' addTimedReminder(
+    text title: 'WFCalendarItemTitle',
+    text when: 'WFAlertCustomTime',
+    text ?notes: 'WFCalendarItemNotes'
+) {
+    "WFCalendarItemAlert": true,
+    "WFAlertTrigger": "At Time"
+}
+
+@value = askValue("عدد الدقائق", "Number", "0")
+@selected = chooseFromList(list("إشعار فقط", "منبه + إشعار"), "اختر النوع")
+@now = currentDate()
+@later = adjustDate(@now, "Add", qty(2, "min"))
+addTimedReminder("🕌 ذكي | اختبار", @later, "اختبار V6")
+@config = "value={@value}\nmode={@selected}"
+createFolder("PrayerAlarm")
+saveFile("PrayerAlarm/test.txt", @config, true)
+showNotification("تم الاختبار", "V6", false)
