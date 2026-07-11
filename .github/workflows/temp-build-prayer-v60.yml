@@ -20,13 +20,17 @@ jobs:
           go-version: '1.24.x'
       - name: Install Cherri
         run: go install github.com/electrikmilk/cherri@68f3f3feaf00768f7943f650b2230605355936ed
-      - name: Compile smoke test
+      - name: Compile complete V6 shortcuts
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
           mkdir -p build
-          "$(go env GOPATH)/bin/cherri" shortcut-v60/test.cherri --skip-sign --debug -o build/test.shortcut 2>&1 | tee build/compile.log
-          ls -lah build shortcut-v60 | tee -a build/compile.log
+          CHERRI="$(go env GOPATH)/bin/cherri"
+          "$CHERRI" shortcut-v60/test.cherri --skip-sign -o build/test.shortcut 2>&1 | tee build/test-compile.log
+          "$CHERRI" shortcut-v60/prayer-settings-v60.cherri --skip-sign -o build/Prayer_Settings_V6_Source.shortcut 2>&1 | tee build/settings-compile.log
+          "$CHERRI" shortcut-v60/prayer-main-v60.cherri --skip-sign -o build/Prayer_Alarm_V6_Source.shortcut 2>&1 | tee build/main-compile.log
+          file build/*.shortcut | tee build/file-types.txt
+          ls -lah build shortcut-v60 | tee build/listing.txt
       - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -34,7 +38,6 @@ jobs:
           name: Prayer_V6_Build_Diagnostics
           path: |
             build/
-            shortcut-v60/*.plist
             shortcut-v60/*.cherri
-            shortcut-v60/*_preprocessed.cherri
+            shortcut-v60/*_processed.cherri
           if-no-files-found: warn
