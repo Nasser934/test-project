@@ -20,13 +20,7 @@ action 'addnewreminder' addTimedReminder(
 
 action 'filter.reminders' findPrayerReminders()
 
-comment('''🕌 منبه الصلوات الذكي V6.0
-
-يقرأ إعدادات المستخدم المحفوظة، ويجلب أوقات اليوم والغد من AlAdhan API، ثم ينشئ فقط التنبيهات المختارة.
-لا يعرض أي إعدادات أثناء التشغيل اليومي.
-لا يحذف منبهات أو تذكيرات المستخدم الشخصية.''')
-
-@settingsFile = getFile("PrayerAlarm/settings.txt", false)
+@settingsFile = getFile("PrayerAlarm/settings.txt", nil, false)
 if !@settingsFile {
     showNotification(
         "شغّل اختصار «إعدادات منبه الصلوات الذكي V6.0» أولًا.",
@@ -38,19 +32,23 @@ if !@settingsFile {
 
 @settingsText = getText(@settingsFile)
 @methodMatch = matchText('(?m)^method=([0-9]+)$', @settingsText)
-@method = getMatchGroup(@methodMatch, 1)
+@methodRaw = getMatchGroup(@methodMatch, 1)
+@method = getText(@methodRaw)
 if !@method { @method = 4 }
 
 @locationModeMatch = matchText('(?m)^location_mode=(.+)$', @settingsText)
-@locationMode = getMatchGroup(@locationModeMatch, 1)
+@locationModeRaw = getMatchGroup(@locationModeMatch, 1)
+@locationMode = getText(@locationModeRaw)
 @latitude = ""
 @longitude = ""
 
 if @locationMode == "fixed" {
     @latMatch = matchText('(?m)^fixed_latitude=(.+)$', @settingsText)
     @lonMatch = matchText('(?m)^fixed_longitude=(.+)$', @settingsText)
-    @latitude = getMatchGroup(@latMatch, 1)
-    @longitude = getMatchGroup(@lonMatch, 1)
+    @latitudeRaw = getMatchGroup(@latMatch, 1)
+    @latitude = getText(@latitudeRaw)
+    @longitudeRaw = getMatchGroup(@lonMatch, 1)
+    @longitude = getText(@longitudeRaw)
 } else {
     @currentLocation = getCurrentLocation()
     @latitude = getLocationDetail(@currentLocation, "Latitude")
@@ -66,51 +64,153 @@ if !@latitude {
     stop()
 }
 
+@latitudeText = getText(@latitude)
+@longitudeText = getText(@longitude)
+@latitudeText = replaceText("٫", ".", @latitudeText)
+@latitudeText = replaceText(",", ".", @latitudeText)
+@longitudeText = replaceText("٫", ".", @longitudeText)
+@longitudeText = replaceText(",", ".", @longitudeText)
+
 @now = currentDate()
 @todayText = formatDate(@now, "Custom", "dd-MM-yyyy")
-@tomorrow = adjustDate(@now, "Add", qty(1, "days"))
+@oneDay = qty(1, "days")
+@tomorrow = adjustDate(@now, "Add", @oneDay)
 @tomorrowText = formatDate(@tomorrow, "Custom", "dd-MM-yyyy")
 
-@todayURL = "https://api.aladhan.com/v1/timings/{@todayText}?latitude={@latitude}&longitude={@longitude}&method={@method}&iso8601=true"
-@tomorrowURL = "https://api.aladhan.com/v1/timings/{@tomorrowText}?latitude={@latitude}&longitude={@longitude}&method={@method}&iso8601=true"
+@todayText = replaceText("٠", "0", @todayText)
+@todayText = replaceText("١", "1", @todayText)
+@todayText = replaceText("٢", "2", @todayText)
+@todayText = replaceText("٣", "3", @todayText)
+@todayText = replaceText("٤", "4", @todayText)
+@todayText = replaceText("٥", "5", @todayText)
+@todayText = replaceText("٦", "6", @todayText)
+@todayText = replaceText("٧", "7", @todayText)
+@todayText = replaceText("٨", "8", @todayText)
+@todayText = replaceText("٩", "9", @todayText)
+@todayText = replaceText("۰", "0", @todayText)
+@todayText = replaceText("۱", "1", @todayText)
+@todayText = replaceText("۲", "2", @todayText)
+@todayText = replaceText("۳", "3", @todayText)
+@todayText = replaceText("۴", "4", @todayText)
+@todayText = replaceText("۵", "5", @todayText)
+@todayText = replaceText("۶", "6", @todayText)
+@todayText = replaceText("۷", "7", @todayText)
+@todayText = replaceText("۸", "8", @todayText)
+@todayText = replaceText("۹", "9", @todayText)
+
+@tomorrowText = replaceText("٠", "0", @tomorrowText)
+@tomorrowText = replaceText("١", "1", @tomorrowText)
+@tomorrowText = replaceText("٢", "2", @tomorrowText)
+@tomorrowText = replaceText("٣", "3", @tomorrowText)
+@tomorrowText = replaceText("٤", "4", @tomorrowText)
+@tomorrowText = replaceText("٥", "5", @tomorrowText)
+@tomorrowText = replaceText("٦", "6", @tomorrowText)
+@tomorrowText = replaceText("٧", "7", @tomorrowText)
+@tomorrowText = replaceText("٨", "8", @tomorrowText)
+@tomorrowText = replaceText("٩", "9", @tomorrowText)
+@tomorrowText = replaceText("۰", "0", @tomorrowText)
+@tomorrowText = replaceText("۱", "1", @tomorrowText)
+@tomorrowText = replaceText("۲", "2", @tomorrowText)
+@tomorrowText = replaceText("۳", "3", @tomorrowText)
+@tomorrowText = replaceText("۴", "4", @tomorrowText)
+@tomorrowText = replaceText("۵", "5", @tomorrowText)
+@tomorrowText = replaceText("۶", "6", @tomorrowText)
+@tomorrowText = replaceText("۷", "7", @tomorrowText)
+@tomorrowText = replaceText("۸", "8", @tomorrowText)
+@tomorrowText = replaceText("۹", "9", @tomorrowText)
+
+@latitudeText = replaceText("٠", "0", @latitudeText)
+@latitudeText = replaceText("١", "1", @latitudeText)
+@latitudeText = replaceText("٢", "2", @latitudeText)
+@latitudeText = replaceText("٣", "3", @latitudeText)
+@latitudeText = replaceText("٤", "4", @latitudeText)
+@latitudeText = replaceText("٥", "5", @latitudeText)
+@latitudeText = replaceText("٦", "6", @latitudeText)
+@latitudeText = replaceText("٧", "7", @latitudeText)
+@latitudeText = replaceText("٨", "8", @latitudeText)
+@latitudeText = replaceText("٩", "9", @latitudeText)
+
+@longitudeText = replaceText("٠", "0", @longitudeText)
+@longitudeText = replaceText("١", "1", @longitudeText)
+@longitudeText = replaceText("٢", "2", @longitudeText)
+@longitudeText = replaceText("٣", "3", @longitudeText)
+@longitudeText = replaceText("٤", "4", @longitudeText)
+@longitudeText = replaceText("٥", "5", @longitudeText)
+@longitudeText = replaceText("٦", "6", @longitudeText)
+@longitudeText = replaceText("٧", "7", @longitudeText)
+@longitudeText = replaceText("٨", "8", @longitudeText)
+@longitudeText = replaceText("٩", "9", @longitudeText)
+
+@todayURL = "https://api.aladhan.com/v1/timings/{@todayText}?latitude={@latitudeText}&longitude={@longitudeText}&method={@method}&iso8601=true"
+@tomorrowURL = "https://api.aladhan.com/v1/timings/{@tomorrowText}?latitude={@latitudeText}&longitude={@longitudeText}&method={@method}&iso8601=true"
 
 @apiResponse = downloadURL(@todayURL)
-@apiData = getDictionary(@apiResponse)
-@fajrCheck = getValue(@apiData, "data.timings.Fajr")
+@apiRoot = getDictionary(@apiResponse)
+@apiCodeRaw = getValue(@apiRoot, "code")
+@apiCode = getText(@apiCodeRaw)
+@apiStatusRaw = getValue(@apiRoot, "status")
+@apiStatus = getText(@apiStatusRaw)
+@apiPayload = {}
+@apiTimings = {}
+@fajrCheck = ""
 @usedCache = false
 
+if @apiCode == "200" {
+    @apiPayloadRaw = getValue(@apiRoot, "data")
+    @apiPayload = getDictionary(@apiPayloadRaw)
+    @apiTimingsRaw = getValue(@apiPayload, "timings")
+    @apiTimings = getDictionary(@apiTimingsRaw)
+    @fajrCheck = getValue(@apiTimings, "Fajr")
+}
+
 if !@fajrCheck {
-    @cacheFile = getFile("PrayerAlarm/cache_tomorrow.json", false)
+    @cacheFile = getFile("PrayerAlarm/cache_tomorrow.json", nil, false)
     if @cacheFile {
         @cacheText = getText(@cacheFile)
-        @cacheData = getDictionary(@cacheText)
-        @cacheDate = getValue(@cacheData, "data.date.gregorian.date")
-        @cacheFajr = getValue(@cacheData, "data.timings.Fajr")
-        if @cacheDate == @todayText && @cacheFajr {
-            @apiData = @cacheData
-            @fajrCheck = @cacheFajr
-            @usedCache = true
+        @cacheRoot = getDictionary(@cacheText)
+        @cacheCodeRaw = getValue(@cacheRoot, "code")
+        @cacheCode = getText(@cacheCodeRaw)
+        if @cacheCode == "200" {
+            @cachePayloadRaw = getValue(@cacheRoot, "data")
+            @cachePayload = getDictionary(@cachePayloadRaw)
+            @cacheTimingsRaw = getValue(@cachePayload, "timings")
+            @cacheTimings = getDictionary(@cacheTimingsRaw)
+            @cacheDateRaw = getValue(@cachePayload, "date")
+            @cacheDateData = getDictionary(@cacheDateRaw)
+            @cacheGregorianRaw = getValue(@cacheDateData, "gregorian")
+            @cacheGregorian = getDictionary(@cacheGregorianRaw)
+            @cacheDateValueRaw = getValue(@cacheGregorian, "date")
+            @cacheDate = getText(@cacheDateValueRaw)
+            @cacheFajr = getValue(@cacheTimings, "Fajr")
+            if @cacheDate == @todayText && @cacheFajr {
+                @apiRoot = @cacheRoot
+                @apiPayload = @cachePayload
+                @apiTimings = @cacheTimings
+                @fajrCheck = @cacheFajr
+                @usedCache = true
+            }
         }
     }
 }
 
 if !@fajrCheck {
-    @stateFile = getFile("PrayerAlarm/state.txt", false)
+    @stateFile = getFile("PrayerAlarm/state.txt", nil, false)
     @stateText = ""
     if @stateFile { @stateText = getText(@stateFile) }
     @failureCount = 1
     if @stateText contains "failures=1" { @failureCount = 2 }
     if @stateText contains "failures=2" { @failureCount = 2 }
-    saveFile("PrayerAlarm/state.txt", "failures={@failureCount}\nlast_failure={@todayText}", true)
+    @failureStateText = "failures={@failureCount}\nlast_failure={@todayText}\napi_status={@apiStatus}"
+    saveFile("PrayerAlarm/state.txt", @failureStateText, true)
     if @failureCount >= 2 {
         showNotification(
-            "لم يتم تحديث مواقيت الصلاة ليومين متتاليين. افتح الاختصار وتحقق من الإنترنت والموقع.",
+            "لم يتم تحديث المواقيت ليومين متتاليين. حالة الخدمة: {@apiStatus}. لم يتم حذف تنبيهاتك الحالية.",
             "⚠️ تنبيه مهم: فشل التحديث",
             true
         )
     } else {
         showNotification(
-            "تعذر جلب المواقيت اليوم. لم يتم حذف التنبيهات الحالية.",
+            "لم تُرجع الخدمة مواقيت صالحة. حالة الخدمة: {@apiStatus}. لم يتم حذف تنبيهاتك الحالية.",
             "⚠️ فشل تحديث مواقيت الصلاة",
             true
         )
@@ -123,16 +223,36 @@ if !@usedCache {
     saveFile("PrayerAlarm/cache_today.json", @todayCacheText, true)
 
     @tomorrowResponse = downloadURL(@tomorrowURL)
-    @tomorrowData = getDictionary(@tomorrowResponse)
-    @tomorrowFajr = getValue(@tomorrowData, "data.timings.Fajr")
-    if @tomorrowFajr {
-        @tomorrowCacheText = getText(@tomorrowResponse)
-        saveFile("PrayerAlarm/cache_tomorrow.json", @tomorrowCacheText, true)
+    @tomorrowRoot = getDictionary(@tomorrowResponse)
+    @tomorrowCodeRaw = getValue(@tomorrowRoot, "code")
+    @tomorrowCode = getText(@tomorrowCodeRaw)
+    if @tomorrowCode == "200" {
+        @tomorrowPayloadRaw = getValue(@tomorrowRoot, "data")
+        @tomorrowPayload = getDictionary(@tomorrowPayloadRaw)
+        @tomorrowTimingsRaw = getValue(@tomorrowPayload, "timings")
+        @tomorrowTimings = getDictionary(@tomorrowTimingsRaw)
+        @tomorrowFajr = getValue(@tomorrowTimings, "Fajr")
+        if @tomorrowFajr {
+            @tomorrowCacheText = getText(@tomorrowResponse)
+            saveFile("PrayerAlarm/cache_tomorrow.json", @tomorrowCacheText, true)
+        }
     }
 }
 
-@weekday = getValue(@apiData, "data.date.gregorian.weekday.en")
-@hijriMonth = getValue(@apiData, "data.date.hijri.month.number")
+@apiDateRaw = getValue(@apiPayload, "date")
+@apiDate = getDictionary(@apiDateRaw)
+@apiGregorianRaw = getValue(@apiDate, "gregorian")
+@apiGregorian = getDictionary(@apiGregorianRaw)
+@apiWeekdayRaw = getValue(@apiGregorian, "weekday")
+@apiWeekday = getDictionary(@apiWeekdayRaw)
+@weekdayRaw = getValue(@apiWeekday, "en")
+@weekday = getText(@weekdayRaw)
+@apiHijriRaw = getValue(@apiDate, "hijri")
+@apiHijri = getDictionary(@apiHijriRaw)
+@apiHijriMonthRaw = getValue(@apiHijri, "month")
+@apiHijriMonth = getDictionary(@apiHijriMonthRaw)
+@hijriMonthRaw = getValue(@apiHijriMonth, "number")
+@hijriMonth = getText(@hijriMonthRaw)
 @isFriday = false
 if @weekday == "Friday" { @isFriday = true }
 @isRamadan = false
@@ -148,89 +268,95 @@ if @oldReminders { removeReminders(@oldReminders) }
 @settingsLines = splitText(@settingsText, "\n")
 
 for line in @settingsLines {
-    if @line contains "|" {
-        @parts = splitText(@line, "|")
-        @key = getListItem(@parts, 1)
-        @mode = getListItem(@parts, 2)
-        @offset = getListItem(@parts, 3)
+    @lineText = getText(@line)
+    if @lineText contains "|" {
+        @parts = splitText(@lineText, "|")
+        @keyRaw = getListItem(@parts, 1)
+        @key = getText(@keyRaw)
+        @modeRaw = getListItem(@parts, 2)
+        @mode = getText(@modeRaw)
+        @offsetRaw = getListItem(@parts, 3)
+        @offset = getText(@offsetRaw)
         @enabled = true
         @baseTime = ""
         @title = ""
         @notes = ""
 
         if @key == "fajr" {
-            @baseTime = getValue(@apiData, "data.timings.Fajr")
+            @baseTime = getValue(@apiTimings, "Fajr")
             @title = "🕌 ذكي | صلاة الفجر"
             @notes = "حان وقت صلاة الفجر"
         }
 
         if @key == "dhuhr" {
-            @baseTime = getValue(@apiData, "data.timings.Dhuhr")
+            @baseTime = getValue(@apiTimings, "Dhuhr")
             @title = "🕌 ذكي | صلاة الظهر"
             @notes = "حان وقت صلاة الظهر"
             if @isFriday == true {
                 @title = "🕌 ذكي | صلاة الجمعة"
                 @notes = "استعد لصلاة الجمعة"
-                @offset = getListItem(@parts, 4)
+                @offsetRaw = getListItem(@parts, 4)
+                @offset = getText(@offsetRaw)
             }
         }
 
         if @key == "asr" {
-            @baseTime = getValue(@apiData, "data.timings.Asr")
+            @baseTime = getValue(@apiTimings, "Asr")
             @title = "🕌 ذكي | صلاة العصر"
             @notes = "حان وقت صلاة العصر"
         }
 
         if @key == "maghrib" {
-            @baseTime = getValue(@apiData, "data.timings.Maghrib")
+            @baseTime = getValue(@apiTimings, "Maghrib")
             @title = "🕌 ذكي | صلاة المغرب"
             @notes = "حان وقت صلاة المغرب"
         }
 
         if @key == "isha" {
-            @baseTime = getValue(@apiData, "data.timings.Isha")
+            @baseTime = getValue(@apiTimings, "Isha")
             @title = "🕌 ذكي | صلاة العشاء"
             @notes = "حان وقت صلاة العشاء"
         }
 
         if @key == "sunrise_warning" {
-            @baseTime = getValue(@apiData, "data.timings.Sunrise")
+            @baseTime = getValue(@apiTimings, "Sunrise")
             @title = "🕌 ذكي | قرب الشروق"
             @notes = "اقترب شروق الشمس — لا تنسَ أذكار الصباح"
         }
 
         if @key == "evening_adhkar" {
-            @baseTime = getValue(@apiData, "data.timings.Sunset")
+            @baseTime = getValue(@apiTimings, "Sunset")
             @title = "🕌 ذكي | أذكار المساء"
             @notes = "اقترب غروب الشمس — لا تنسَ أذكار المساء"
         }
 
         if @key == "qiyam" {
-            @qiyamSource = getListItem(@parts, 4)
+            @qiyamSourceRaw = getListItem(@parts, 4)
+            @qiyamSource = getText(@qiyamSourceRaw)
             if @qiyamSource == "lastthird" {
-                @baseTime = getValue(@apiData, "data.timings.Lastthird")
+                @baseTime = getValue(@apiTimings, "Lastthird")
             } else {
-                @baseTime = getValue(@apiData, "data.timings.Fajr")
+                @baseTime = getValue(@apiTimings, "Fajr")
             }
             @title = "🕌 ذكي | قيام الليل"
             @notes = "وقت قيام الليل"
         }
 
         if @key == "duha" {
-            @baseTime = getValue(@apiData, "data.timings.Sunrise")
+            @baseTime = getValue(@apiTimings, "Sunrise")
             @title = "🕌 ذكي | صلاة الضحى"
             @notes = "حان وقت صلاة الضحى"
         }
 
         if @key == "witr" {
-            @baseTime = getValue(@apiData, "data.timings.Fajr")
+            @baseTime = getValue(@apiTimings, "Fajr")
             @title = "🕌 ذكي | صلاة الوتر"
             @notes = "لا تنسَ صلاة الوتر"
         }
 
         if @key == "friday_reminder" {
             if @isFriday == true {
-                @baseTime = getValue(@apiData, "data.timings.Dhuhr")
+                @baseTime = getValue(@apiTimings, "Dhuhr")
                 @title = "🕌 ذكي | تذكير الجمعة"
                 @notes = "جمعة مباركة — لا تنسَ سورة الكهف والصلاة على النبي ﷺ"
             } else {
@@ -240,7 +366,7 @@ for line in @settingsLines {
 
         if @key == "suhoor" {
             if @isRamadan == true {
-                @baseTime = getValue(@apiData, "data.timings.Fajr")
+                @baseTime = getValue(@apiTimings, "Fajr")
                 @title = "🕌 ذكي | تذكير السحور"
                 @notes = "وقت السحور — تسحروا فإن في السحور بركة"
             } else {
@@ -250,7 +376,7 @@ for line in @settingsLines {
 
         if @key == "imsak" {
             if @isRamadan == true {
-                @baseTime = getValue(@apiData, "data.timings.Imsak")
+                @baseTime = getValue(@apiTimings, "Imsak")
                 @title = "🕌 ذكي | تذكير الإمساك"
                 @notes = "اقترب وقت الفجر"
             } else {
@@ -260,7 +386,7 @@ for line in @settingsLines {
 
         if @key == "iftar" {
             if @isRamadan == true {
-                @baseTime = getValue(@apiData, "data.timings.Maghrib")
+                @baseTime = getValue(@apiTimings, "Maghrib")
                 @title = "🕌 ذكي | موعد الإفطار"
                 @notes = "حان موعد الإفطار"
             } else {
@@ -270,7 +396,9 @@ for line in @settingsLines {
 
         if @enabled == true && @baseTime {
             @targetTime = date(@baseTime)
-            @targetTime = adjustDate(@targetTime, "Add", qty(@offset, "min"))
+            @offsetNumber = getNumbers(@offset)
+            @offsetDuration = qty(@offsetNumber, "min")
+            @targetTime = adjustDate(@targetTime, "Add", @offsetDuration)
 
             if @targetTime > @now {
                 if @mode == "alarm_notification" {
@@ -287,7 +415,8 @@ for line in @settingsLines {
 
 @createdCount = count(@created)
 @successMatch = matchText('(?m)^success_notification=([01])$', @settingsText)
-@successEnabled = getMatchGroup(@successMatch, 1)
+@successEnabledRaw = getMatchGroup(@successMatch, 1)
+@successEnabled = getText(@successEnabledRaw)
 
 @statusNote = ""
 if @usedCache == true { @statusNote = "\nتم استخدام النسخة الاحتياطية المحفوظة." }
@@ -300,8 +429,9 @@ if @successEnabled == 1 {
     )
 }
 
+@successStateText = "failures=0\nlast_success={@todayText}\ncreated={@createdCount}\nused_cache={@usedCache}"
 saveFile(
     "PrayerAlarm/state.txt",
-    "failures=0\nlast_success={@todayText}\ncreated={@createdCount}\nused_cache={@usedCache}",
+    @successStateText,
     true
 )
