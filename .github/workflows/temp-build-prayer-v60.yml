@@ -1,0 +1,38 @@
+name: Temp Build Prayer V6
+
+on:
+  push:
+    branches: [temp-build-prayer-v60-20260711]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+      - name: Install Cherri
+        run: go install github.com/electrikmilk/cherri@68f3f3feaf00768f7943f650b2230605355936ed
+      - name: Compile smoke test
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p build
+          "$(go env GOPATH)/bin/cherri" shortcut-v60/test.cherri --skip-sign --debug -o build/test.shortcut 2>&1 | tee build/compile.log
+          ls -lah build shortcut-v60 | tee -a build/compile.log
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Prayer_V6_Build_Diagnostics
+          path: |
+            build/
+            shortcut-v60/*.plist
+            shortcut-v60/*.cherri
+            shortcut-v60/*_preprocessed.cherri
+          if-no-files-found: warn
