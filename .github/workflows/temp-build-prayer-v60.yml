@@ -24,9 +24,11 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           p = Path('shortcut-v60/prayer-settings-v60.cherri')
           s = p.read_text(encoding='utf-8')
+          s = re.sub(r"comment\('''.*?'''\)\s*", "", s, flags=re.S)
           s = s.replace('@lines = []', '@modeOptions = list("إشعار فقط", "منبه الساعة + إشعار")\n@lines = []')
           s = s.replace('chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"),', 'chooseFromList(@modeOptions,')
           s = s.replace('''@methodName = chooseFromList(
@@ -65,6 +67,7 @@ jobs:
 
           p = Path('shortcut-v60/prayer-main-v60.cherri')
           s = p.read_text(encoding='utf-8')
+          s = re.sub(r"comment\('''.*?'''\)\s*", "", s, flags=re.S)
           s = s.replace('@tomorrow = adjustDate(@now, "Add", qty(1, "days"))', '@oneDay = qty(1, "days")\n@tomorrow = adjustDate(@now, "Add", @oneDay)')
           s = s.replace('@targetTime = adjustDate(@targetTime, "Add", qty(@offset, "min"))', '@offsetDuration = qty(@offset, "min")\n            @targetTime = adjustDate(@targetTime, "Add", @offsetDuration)')
           p.write_text(s, encoding='utf-8')
