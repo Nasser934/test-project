@@ -1,0 +1,242 @@
+#include 'actions/location'
+#include 'actions/documents'
+#include 'actions/calendar'
+#include 'actions/text'
+#include 'actions/shortcuts'
+
+#define name إعدادات منبه الصلوات الذكي V6.0
+#define color green
+#define glyph apple
+#define version 26
+
+enum askKind {
+    'Text',
+    'Number'
+}
+
+action default 'ask' askValue(
+    text promptText: 'WFAskActionPrompt',
+    askKind ?kind: 'WFInputType' = "Text",
+    text ?defaultValue: 'WFAskActionDefaultAnswer'
+)
+
+comment('''⚙️ إعدادات منبه الصلوات الذكي V6.0
+
+شغّل هذا الاختصار عند أول تثبيت أو عند رغبتك في تغيير الإعدادات.
+بعد الحفظ، يعمل الاختصار الرئيسي يدويًا أو من الأتمتة باستخدام اختياراتك نفسها دون أسئلة.''')
+
+@eventNames = list(
+    "صلاة الفجر",
+    "الظهر / صلاة الجمعة",
+    "صلاة العصر",
+    "صلاة المغرب",
+    "صلاة العشاء",
+    "قرب الشروق — لا تنسَ أذكار الصباح",
+    "أذكار المساء قبل الغروب",
+    "قيام الليل",
+    "صلاة الضحى",
+    "صلاة الوتر",
+    "تذكير الجمعة",
+    "تذكير السحور في رمضان",
+    "تذكير الإمساك في رمضان",
+    "تذكير الإفطار في رمضان"
+)
+
+@selected = chooseFromList(
+    @eventNames,
+    "اختر الصلوات والأوقات التي تريدها. يمكنك اختيار أي عدد.",
+    true,
+    true
+)
+
+if !@selected {
+    alert("يجب اختيار تنبيه واحد على الأقل.", "لم يتم الحفظ")
+    stop()
+}
+
+@methodName = chooseFromList(
+    list("أم القرى — مناسب للمملكة", "رابطة العالم الإسلامي", "الهيئة المصرية", "جامعة كراتشي"),
+    "اختر طريقة حساب مواقيت الصلاة"
+)
+@method = 4
+if @methodName == "رابطة العالم الإسلامي" { @method = 3 }
+if @methodName == "الهيئة المصرية" { @method = 5 }
+if @methodName == "جامعة كراتشي" { @method = 1 }
+
+@locationChoice = chooseFromList(
+    list("موقعي الحالي يوميًا — مناسب للسفر", "مدينة ثابتة"),
+    "كيف تريد تحديد الموقع؟"
+)
+@locationMode = "current"
+@fixedCity = ""
+@fixedLatitude = ""
+@fixedLongitude = ""
+
+if @locationChoice == "مدينة ثابتة" {
+    @locationMode = "fixed"
+    @fixedCity = askValue("اكتب اسم المدينة والدولة، مثال: الرياض، السعودية", "Text", "الرياض، السعودية")
+    @fixedLocation = location(@fixedCity)
+    @fixedLatitude = getLocationDetail(@fixedLocation, "Latitude")
+    @fixedLongitude = getLocationDetail(@fixedLocation, "Longitude")
+    if !@fixedLatitude {
+        alert("تعذر تحديد إحداثيات المدينة. أعد تشغيل الإعدادات واستخدم اسمًا أوضح.", "خطأ في المدينة")
+        stop()
+    }
+}
+
+@successChoice = chooseFromList(
+    list("تشغيل إشعار نجاح التحديث", "إيقاف إشعار النجاح"),
+    "هل تريد إشعارًا بعد نجاح التحديث اليومي؟"
+)
+@successNotification = 1
+if @successChoice == "إيقاف إشعار النجاح" { @successNotification = 0 }
+
+@qiyamSource = "fajr"
+if @selected contains "قيام الليل" {
+    @qiyamChoice = chooseFromList(
+        list("قبل الفجر — الافتراضي نصف ساعة", "بداية الثلث الأخير من الليل من API"),
+        "اختر طريقة وقت قيام الليل"
+    )
+    if @qiyamChoice == "بداية الثلث الأخير من الليل من API" { @qiyamSource = "lastthird" }
+}
+
+@lines = []
+@lines += "version=6"
+@lines += "method={@method}"
+@lines += "method_name={@methodName}"
+@lines += "location_mode={@locationMode}"
+@lines += "fixed_city={@fixedCity}"
+@lines += "fixed_latitude={@fixedLatitude}"
+@lines += "fixed_longitude={@fixedLongitude}"
+@lines += "success_notification={@successNotification}"
+@lines += "qiyam_source={@qiyamSource}"
+
+if @selected contains "صلاة الفجر" {
+    @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تنبيه صلاة الفجر")
+    @mode = "notification"
+    if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
+    @offset = askValue("فرق الدقائق لصلاة الفجر. 0 = وقت الأذان، والسالب قبل الوقت.", "Number", "0")
+    @lines += "fajr|{@mode}|{@offset}"
+}
+
+if @selected contains "الظهر / صلاة الجمعة" {
+    @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تنبيه الظهر وصلاة الجمعة")
+    @mode = "notification"
+    if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
+    @offset = askValue("فرق الدقائق لصلاة الظهر في الأيام العادية.", "Number", "0")
+    @fridayOffset = askValue("فرق الدقائق لصلاة الجمعة يوم الجمعة. الافتراضي قبل الأذان بساعة.", "Number", "-60")
+    @lines += "dhuhr|{@mode}|{@offset}|{@fridayOffset}"
+}
+
+if @selected contains "صلاة العصر" {
+    @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تنبيه صلاة العصر")
+    @mode = "notification"
+    if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
+    @offset = askValue("فرق الدقائق لصلاة العصر.", "Number", "0")
+    @lines += "asr|{@mode}|{@offset}"
+}
+
+if @selected contains "صلاة المغرب" {
+    @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تنبيه صلاة المغرب")
+    @mode = "notification"
+    if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
+    @offset = askValue("فرق الدقائق لصلاة المغرب.", "Number", "0")
+    @lines += "maghrib|{@mode}|{@offset}"
+}
+
+if @selected contains "صلاة العشاء" {
+    @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تنبيه صلاة العشاء")
+    @mode = "notification"
+    if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
+    @offset = askValue("فرق الدقائق لصلاة العشاء.", "Number", "0")
+    @lines += "isha|{@mode}|{@offset}"
+}
+
+if @selected contains "قرب الشروق — لا تنسَ أذكار الصباح" {
+    @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تنبيه قرب الشروق")
+    @mode = "notification"
+    if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
+    @offset = askValue("فرق الدقائق عن الشروق. الافتراضي قبل الشروق بـ20 دقيقة.", "Number", "-20")
+    @lines += "sunrise_warning|{@mode}|{@offset}"
+}
+
+if @selected contains "أذكار المساء قبل الغروب" {
+    @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تنبيه أذكار المساء")
+    @mode = "notification"
+    if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
+    @offset = askValue("فرق الدقائق عن غروب الشمس. الافتراضي قبل الغروب بـ20 دقيقة.", "Number", "-20")
+    @lines += "evening_adhkar|{@mode}|{@offset}"
+}
+
+if @selected contains "قيام الليل" {
+    @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تنبيه قيام الليل")
+    @mode = "notification"
+    if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
+    @defaultQiyam = "-30"
+    if @qiyamSource == "lastthird" { @defaultQiyam = "0" }
+    @offset = askValue("فرق الدقائق لقيام الليل. عند اختيار قبل الفجر، الافتراضي -30.", "Number", @defaultQiyam)
+    @lines += "qiyam|{@mode}|{@offset}|{@qiyamSource}"
+}
+
+if @selected contains "صلاة الضحى" {
+    @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تذكير صلاة الضحى")
+    @mode = "notification"
+    if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
+    @offset = askValue("فرق الدقائق بعد الشروق لصلاة الضحى. الافتراضي +20.", "Number", "20")
+    @lines += "duha|{@mode}|{@offset}"
+}
+
+if @selected contains "صلاة الوتر" {
+    @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تنبيه صلاة الوتر")
+    @mode = "notification"
+    if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
+    @offset = askValue("فرق الدقائق عن أذان الفجر للوتر. الافتراضي قبل الفجر بـ45 دقيقة.", "Number", "-45")
+    @lines += "witr|{@mode}|{@offset}"
+}
+
+if @selected contains "تذكير الجمعة" {
+    @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تذكير الجمعة")
+    @mode = "notification"
+    if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
+    @offset = askValue("فرق الدقائق عن وقت الظهر يوم الجمعة. الافتراضي قبل 3 ساعات.", "Number", "-180")
+    @lines += "friday_reminder|{@mode}|{@offset}"
+}
+
+if @selected contains "تذكير السحور في رمضان" {
+    @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تذكير السحور")
+    @mode = "notification"
+    if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
+    @offset = askValue("فرق الدقائق عن الفجر للسحور. الافتراضي قبل الفجر بساعة.", "Number", "-60")
+    @lines += "suhoor|{@mode}|{@offset}"
+}
+
+if @selected contains "تذكير الإمساك في رمضان" {
+    @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تذكير الإمساك")
+    @mode = "notification"
+    if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
+    @offset = askValue("فرق الدقائق عن وقت الإمساك الموجود في API.", "Number", "0")
+    @lines += "imsak|{@mode}|{@offset}"
+}
+
+if @selected contains "تذكير الإفطار في رمضان" {
+    @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تذكير الإفطار")
+    @mode = "notification"
+    if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
+    @offset = askValue("فرق الدقائق عن أذان المغرب للإفطار.", "Number", "0")
+    @lines += "iftar|{@mode}|{@offset}"
+}
+
+@configText = joinText(@lines, "\n")
+createFolder("PrayerAlarm")
+saveFile("PrayerAlarm/settings.txt", @configText, true)
+
+showNotification(
+    "تم حفظ اختياراتك. شغّل منبه الصلوات الذكي V6.0 الآن لتحديث التنبيهات، ثم اربطه بالأتمتة اليومية.",
+    "✅ تم حفظ إعدادات منبه الصلوات",
+    false
+)
+
+alert(
+    "تم الحفظ بنجاح.\n\nالخطوة التالية:\n1. شغّل الاختصار الرئيسي مرة واحدة.\n2. امنحه صلاحيات الموقع والساعة والتذكيرات.\n3. عند الحذف اختر «الحذف دائمًا».\n4. اجعل الأتمتة اليومية تشغّل الاختصار الرئيسي.",
+    "الإعدادات جاهزة"
+)
