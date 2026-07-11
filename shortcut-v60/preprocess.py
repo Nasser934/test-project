@@ -1,7 +1,7 @@
 from pathlib import Path
 import re
 
-# Settings shortcut
+# Settings shortcut: normalize a few Cherri constructs into forms that compile reliably.
 p = Path('shortcut-v60/prayer-settings-v60.cherri')
 s = p.read_text(encoding='utf-8')
 s = re.sub(r"comment\('''.*?'''\)\s*", "", s, flags=re.S)
@@ -68,7 +68,7 @@ s = s.replace('@fixedCity = askValue(', '@fixedCityInput = askValue(')
 s = s.replace('    @fixedLocation = location(@fixedCity)', '    @fixedCity = getText(@fixedCityInput)\n    @fixedLocation = location(@fixedCity)')
 p.write_text(s, encoding='utf-8')
 
-# Main shortcut
+# Main shortcut: remove comments and normalize optional Get File calls.
 p = Path('shortcut-v60/prayer-main-v60.cherri')
 s = p.read_text(encoding='utf-8')
 s = re.sub(r"comment\('''.*?'''\)\s*", "", s, flags=re.S)
