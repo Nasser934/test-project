@@ -19,5 +19,10 @@ saveFile(
     true
 )'''
 )
+s = s.replace(
+    '@offsetDuration = qty(@offset, "min")',
+    '@offsetNumber = getNumbers(@offset)\n            @offsetDuration = qty(@offsetNumber, "min")'
+)
 p.write_text(s, encoding='utf-8')
 assert 'saveFile("PrayerAlarm/state.txt", "' not in s
+assert 'qty(@offset, "min")' not in s
