@@ -30,11 +30,10 @@ action 'addnewreminder' addTimedReminder(
 }
 
 @value = askValue("عدد الدقائق", "Number", "0")
-@choices = list("إشعار فقط", "منبه + إشعار")
-@selected = chooseFromList(@choices, "اختر النوع")
+@modeOptions = list("إشعار فقط", "منبه + إشعار")
+@selected = chooseFromList(@modeOptions, "اختر النوع")
 @now = currentDate()
-@delta = qty(2, "min")
-@later = adjustDate(@now, "Add", @delta)
+@later = adjustDate(@now, "Add", qty(2, "min"))
 addTimedReminder("🕌 ذكي | اختبار", @later, "اختبار V6")
 @config = "value={@value}\nmode={@selected}"
 createFolder("PrayerAlarm")
