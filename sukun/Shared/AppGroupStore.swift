@@ -1,6 +1,6 @@
 import Foundation
-import FamilyControls
-import ManagedSettings
+@preconcurrency import FamilyControls
+@preconcurrency import ManagedSettings
 import SukunCore
 
 enum AppGroup {

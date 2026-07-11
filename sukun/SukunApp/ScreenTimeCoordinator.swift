@@ -1,7 +1,7 @@
-import DeviceActivity
-import FamilyControls
+@preconcurrency import DeviceActivity
+@preconcurrency import FamilyControls
 import Foundation
-import ManagedSettings
+@preconcurrency import ManagedSettings
 import SukunCore
 
 @MainActor
