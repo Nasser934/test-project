@@ -20,11 +20,6 @@ action default 'ask' askValue(
     text ?defaultValue: 'WFAskActionDefaultAnswer'
 )
 
-comment('''⚙️ إعدادات منبه الصلوات الذكي V6.0
-
-شغّل هذا الاختصار عند أول تثبيت أو عند رغبتك في تغيير الإعدادات.
-بعد الحفظ، يعمل الاختصار الرئيسي يدويًا أو من الأتمتة باستخدام اختياراتك نفسها دون أسئلة.''')
-
 @eventNames = list(
     "صلاة الفجر",
     "الظهر / صلاة الجمعة",
@@ -206,7 +201,7 @@ if @selected contains "تذكير السحور في رمضان" {
     @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تذكير السحور")
     @mode = "notification"
     if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
-    @offset = askValue("فرق الدقائق عن الفجر للسحور. الافتراضي قبل الفجر بساعة.", "Number", "-60")
+    @offset = askValue("فرق الدقائق عن الفجر. الافتراضي قبل الفجر بساعة.", "Number", "-60")
     @lines += "suhoor|{@mode}|{@offset}"
 }
 
@@ -214,7 +209,7 @@ if @selected contains "تذكير الإمساك في رمضان" {
     @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تذكير الإمساك")
     @mode = "notification"
     if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
-    @offset = askValue("فرق الدقائق عن وقت الإمساك الموجود في API.", "Number", "0")
+    @offset = askValue("فرق الدقائق عن وقت الإمساك.", "Number", "0")
     @lines += "imsak|{@mode}|{@offset}"
 }
 
@@ -222,21 +217,16 @@ if @selected contains "تذكير الإفطار في رمضان" {
     @modeChoice = chooseFromList(list("إشعار فقط", "منبه الساعة + إشعار"), "نوع تذكير الإفطار")
     @mode = "notification"
     if @modeChoice == "منبه الساعة + إشعار" { @mode = "alarm_notification" }
-    @offset = askValue("فرق الدقائق عن أذان المغرب للإفطار.", "Number", "0")
+    @offset = askValue("فرق الدقائق عن المغرب.", "Number", "0")
     @lines += "iftar|{@mode}|{@offset}"
 }
 
 @configText = joinText(@lines, "\n")
 createFolder("PrayerAlarm")
 saveFile("PrayerAlarm/settings.txt", @configText, true)
-
 showNotification(
     "تم حفظ اختياراتك. شغّل منبه الصلوات الذكي V6.0 الآن لتحديث التنبيهات، ثم اربطه بالأتمتة اليومية.",
     "✅ تم حفظ إعدادات منبه الصلوات",
     false
 )
-
-alert(
-    "تم الحفظ بنجاح.\n\nالخطوة التالية:\n1. شغّل الاختصار الرئيسي مرة واحدة.\n2. امنحه صلاحيات الموقع والساعة والتذكيرات.\n3. عند الحذف اختر «الحذف دائمًا».\n4. اجعل الأتمتة اليومية تشغّل الاختصار الرئيسي.",
-    "الإعدادات جاهزة"
-)
+alert("تم حفظ الإعدادات بنجاح.", "جاهز للتشغيل")
