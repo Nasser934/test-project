@@ -21,12 +21,15 @@ jobs:
           set -euo pipefail
           mkdir -p build
           curl -fsSL 'https://api.aladhan.com/v1/timings/11-07-2026?latitude=24.7136&longitude=46.6753&method=4&iso8601=true' -o build/api-ddmmyyyy.json
-          curl -fsSL 'https://api.aladhan.com/v1/timings/2026-07-11?latitude=24.7136&longitude=46.6753&method=4&iso8601=true' -o build/api-yyyymmdd.json
           python3 - <<'PY' | tee build/api-analysis.txt
           import json
-          for path in ['build/api-ddmmyyyy.json','build/api-yyyymmdd.json']:
-              d=json.load(open(path))
-              print(path, 'code=', d.get('code'), 'status=', d.get('status'), 'data_type=', type(d.get('data')).__name__, 'data=', str(d.get('data'))[:300])
+          d=json.load(open('build/api-ddmmyyyy.json'))
+          assert d.get('code') == 200, d
+          assert isinstance(d.get('data'), dict), type(d.get('data'))
+          assert isinstance(d['data'].get('timings'), dict), type(d['data'].get('timings'))
+          assert d['data']['timings'].get('Fajr')
+          print('api_ok=true')
+          print('fajr=', d['data']['timings']['Fajr'])
           PY
       - uses: actions/setup-go@v5
         with:
@@ -51,6 +54,23 @@ jobs:
         run: |
           set -euo pipefail
           python3 shortcut-v60/inspect_sign.py | tee build/sign.log
+          python3 - <<'PY' | tee build/structural-validation.txt
+          import plistlib
+          p=plistlib.load(open('build/Prayer_Alarm_Smart_V6_0_Source.shortcut','rb'))
+          actions=p['WFWorkflowActions']
+          adjusts=[a for a in actions if a.get('WFWorkflowActionIdentifier')=='is.workflow.actions.adjustdate']
+          assert len(adjusts) == 2, len(adjusts)
+          for a in adjusts:
+              d=a['WFWorkflowActionParameters']['WFDuration']
+              assert d['WFSerializationType']=='WFQuantityFieldValue', d
+              assert 'oneDay' not in repr(d) and 'offsetDuration' not in repr(d), d
+          alarm_index=next(i for i,a in enumerate(actions) if a.get('WFWorkflowActionIdentifier')=='com.apple.mobiletimer-framework.MobileTimerIntents.MTGetAlarmsIntent')
+          repeat_index=next(i for i,a in enumerate(actions) if a.get('WFWorkflowActionIdentifier')=='is.workflow.actions.repeat.each' and a.get('WFWorkflowActionParameters',{}).get('WFControlFlowMode')==0)
+          assert alarm_index > repeat_index, (alarm_index, repeat_index)
+          assert any(a.get('WFWorkflowActionIdentifier')=='is.workflow.actions.notification' for a in actions)
+          print('duration_patch_ok=true')
+          print('cleanup_inside_loop=true')
+          PY
           file build/*.shortcut | tee build/signed-file-types.txt
           ls -lah build | tee build/listing-after-sign.txt
       - name: Upload signed V6 package
