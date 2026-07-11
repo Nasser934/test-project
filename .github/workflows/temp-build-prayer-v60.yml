@@ -21,7 +21,9 @@ jobs:
       - name: Install Cherri
         run: go install github.com/electrikmilk/cherri@68f3f3feaf00768f7943f650b2230605355936ed
       - name: Preprocess V6 Cherri sources
-        run: python3 shortcut-v60/preprocess.py
+        run: |
+          python3 shortcut-v60/preprocess.py
+          python3 shortcut-v60/postfix.py
       - name: Compile complete V6 shortcuts
         shell: bash
         run: |
