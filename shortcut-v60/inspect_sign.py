@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import plistlib
+import traceback
 import urllib.error
 import urllib.request
 from collections import Counter
@@ -72,12 +73,13 @@ def normalize_and_patch(shortcut: dict, name: str, is_main: bool) -> tuple[bytes
         rp['WFContentItemFilter'] = content_filter('Title', PREFIX)
 
         required = {
-            'com.apple.mobiletimer.DeleteAlarmIntent': 1,
+            'com.apple.clock.DeleteAlarmIntent': 1,
             'com.apple.mobiletimer-framework.MobileTimerIntents.MTCreateAlarmIntent': 1,
             'is.workflow.actions.addnewreminder': 1,
             'is.workflow.actions.removereminders': 1,
             'is.workflow.actions.downloadurl': 2,
-            'is.workflow.actions.documentpicker.open': 4,
+            'is.workflow.actions.documentpicker.open': 3,
+            'is.workflow.actions.documentpicker.save': 4,
         }
         for action_id, minimum in required.items():
             if ids[action_id] < minimum:
@@ -157,7 +159,7 @@ try:
         f'main_prefix={main_signed[:4]!r}',
         f'settings_prefix={settings_signed[:4]!r}',
         f'alarm_get_count={main_ids["com.apple.mobiletimer-framework.MobileTimerIntents.MTGetAlarmsIntent"]}',
-        f'alarm_delete_count={main_ids["com.apple.mobiletimer.DeleteAlarmIntent"]}',
+        f'alarm_delete_count={main_ids["com.apple.clock.DeleteAlarmIntent"]}',
         f'alarm_create_count={main_ids["com.apple.mobiletimer-framework.MobileTimerIntents.MTCreateAlarmIntent"]}',
         f'reminder_find_count={main_ids["is.workflow.actions.filter.reminders"]}',
         f'reminder_add_count={main_ids["is.workflow.actions.addnewreminder"]}',
@@ -171,6 +173,10 @@ except urllib.error.HTTPError as exc:
     log.append(f'http_error={exc.code}')
     log.append(f'http_body={body[:1000]!r}')
     raise
+except Exception as exc:
+    log.append(f'exception={type(exc).__name__}: {exc}')
+    log.append(traceback.format_exc())
+    raise
 finally:
     DIAG.write_text('\n'.join(log), encoding='utf-8')
-    print('\n'.join(log))
+    print('\n'.join(log), flush=True)
