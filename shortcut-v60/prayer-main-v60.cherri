@@ -258,13 +258,8 @@ if @weekday == "Friday" { @isFriday = true }
 @isRamadan = false
 if @hijriMonth == 9 { @isRamadan = true }
 
-@oldAlarms = getAlarms()
-if @oldAlarms { deleteAlarm(@oldAlarms) }
-
-@oldReminders = findPrayerReminders()
-if @oldReminders { removeReminders(@oldReminders) }
-
 @created = []
+@cleanupDone = false
 @settingsLines = splitText(@settingsText, "\n")
 
 for line in @settingsLines {
@@ -401,6 +396,16 @@ for line in @settingsLines {
             @targetTime = adjustDate(@targetTime, "Add", @offsetDuration)
 
             if @targetTime > @now {
+                if @cleanupDone == false {
+                    @oldAlarms = getAlarms()
+                    if @oldAlarms { deleteAlarm(@oldAlarms) }
+
+                    @oldReminders = findPrayerReminders()
+                    if @oldReminders { removeReminders(@oldReminders) }
+
+                    @cleanupDone = true
+                }
+
                 if @mode == "alarm_notification" {
                     createAlarm(@title, @targetTime, true)
                 }
@@ -421,15 +426,28 @@ for line in @settingsLines {
 @statusNote = ""
 if @usedCache == true { @statusNote = "\nتم استخدام النسخة الاحتياطية المحفوظة." }
 
-if @successEnabled == 1 {
+if @createdCount == 0 {
     showNotification(
-        "تم تحديث {@createdCount} عنصرًا حسب إعداداتك.{@statusNote}",
-        "✅ تم تحديث تنبيهات الصلاة",
-        false
+        "لم يوجد أي تنبيه مختار وقته ما زال قادمًا اليوم. لم تُحذف تنبيهاتك السابقة.",
+        "ℹ️ لم يتم إنشاء تنبيهات جديدة",
+        true
     )
+} else {
+    if @successEnabled == "1" {
+        showNotification(
+            "تم إنشاء {@createdCount} عنصرًا حسب إعداداتك.{@statusNote}",
+            "✅ تم تحديث تنبيهات الصلاة",
+            false
+        )
+    }
 }
 
-@successStateText = "failures=0\nlast_success={@todayText}\ncreated={@createdCount}\nused_cache={@usedCache}"
+@effectiveDate = @todayText
+if @apiGregorian {
+    @effectiveDateRaw = getValue(@apiGregorian, "date")
+    @effectiveDate = getText(@effectiveDateRaw)
+}
+@successStateText = "failures=0\nlast_success={@effectiveDate}\ncreated={@createdCount}\nused_cache={@usedCache}\ncleanup_done={@cleanupDone}"
 saveFile(
     "PrayerAlarm/state.txt",
     @successStateText,
