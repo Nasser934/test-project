@@ -30,19 +30,25 @@ jobs:
           set -euo pipefail
           mkdir -p build
           CHERRI="$(go env GOPATH)/bin/cherri"
-          "$CHERRI" shortcut-v60/test.cherri --skip-sign -o build/test.shortcut 2>&1 | tee build/test-compile.log
-          "$CHERRI" shortcut-v60/prayer-settings-v60.cherri --skip-sign -o build/Prayer_Settings_V6_Source.shortcut 2>&1 | tee build/settings-compile.log
-          "$CHERRI" shortcut-v60/prayer-main-v60.cherri --skip-sign -o build/Prayer_Alarm_V6_Source.shortcut 2>&1 | tee build/main-compile.log
-          file build/*.shortcut | tee build/file-types.txt
-          ls -lah build shortcut-v60 | tee build/listing.txt
-      - name: Upload diagnostics
+          "$CHERRI" shortcut-v60/test.cherri --skip-sign 2>&1 | tee build/test-compile.log
+          "$CHERRI" shortcut-v60/prayer-settings-v60.cherri --skip-sign 2>&1 | tee build/settings-compile.log
+          "$CHERRI" shortcut-v60/prayer-main-v60.cherri --skip-sign 2>&1 | tee build/main-compile.log
+          file shortcut-v60/*_unsigned.shortcut | tee build/file-types.txt
+          ls -lah build shortcut-v60 | tee build/listing-before-sign.txt
+      - name: Patch, validate and sign V6
+        run: |
+          set -euo pipefail
+          python3 shortcut-v60/inspect_sign.py | tee build/sign.log
+          file build/*.shortcut | tee build/signed-file-types.txt
+          ls -lah build | tee build/listing-after-sign.txt
+      - name: Upload signed V6 package
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Prayer_V6_Build_Diagnostics
+          name: Prayer_Alarm_Smart_V6_0_Complete
           path: |
             build/
             shortcut-v60/*.cherri
             shortcut-v60/*.py
-            shortcut-v60/*_processed.cherri
+            shortcut-v60/*_unsigned.shortcut
           if-no-files-found: warn
