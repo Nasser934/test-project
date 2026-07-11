@@ -27,7 +27,8 @@ if !@settingsFile {
 }
 
 @settingsText = getText(@settingsFile)
-if !(@settingsText contains "version=6.1") {
+@settingsVersionMatch = matchText('(?m)^version=6\.1$', @settingsText)
+if !@settingsVersionMatch {
     showNotification("الإعدادات القديمة غير متوافقة. شغّل اختصار إعدادات V6.1 مرة واحدة.", "⚙️ يلزم تحديث الإعدادات", true)
     stop()
 }
@@ -99,7 +100,7 @@ if !@latitude {
 @apiStatusRaw = getValue(@apiRoot, "status")
 @apiStatus = getText(@apiStatusRaw)
 
-if !(@apiCode == "200") {
+if @apiCode != "200" {
     @stateFile = getFile("PrayerAlarm/state.txt", nil, false)
     @stateText = ""
     if @stateFile { @stateText = getText(@stateFile) }
@@ -162,9 +163,15 @@ for line in @settingsLines {
         @notes = getText(@notesRaw)
         @rule = getText(@ruleRaw)
         @enabled = true
-        if @rule == "friday" && @isFriday == false { @enabled = false }
-        if @rule == "not_friday" && @isFriday == true { @enabled = false }
-        if @rule == "ramadan" && @isRamadan == false { @enabled = false }
+        if @rule == "friday" {
+            if @isFriday == false { @enabled = false }
+        }
+        if @rule == "not_friday" {
+            if @isFriday == true { @enabled = false }
+        }
+        if @rule == "ramadan" {
+            if @isRamadan == false { @enabled = false }
+        }
 
         if @enabled == true {
             @baseTime = getValue(@apiTimings, @sourceKey)
